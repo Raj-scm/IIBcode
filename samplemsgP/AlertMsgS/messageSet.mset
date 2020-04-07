@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MSGModel:MRMessageSet xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:MSGModel="MSGModel.xmi" xmi:id="MRMessageSet_1" name="AlertMsgS" namespacesEnabled="false" currentMessageSetId="MRMessageSetID_1">
+  <MRMessageSetRep xmi:type="MSGModel:MRCWFMessageSetRep" xmi:id="MRCWFMessageSetRep_1" name="CWF1" daysInFirstWeekOfTheYear="Four" firstDayOfWeek="Monday" timeZoneID="0"/>
+  <MRMessageSetRep xmi:type="MSGModel:MRXMLMessageSetRep" xmi:id="MRXMLMessageSetRep_1" name="XML1" timeZoneID="0" doctypeSystemID="www.mrmnames.net/ITEB53O002001" doctypePublicID="ITEB53O002001" enableVersioningSupport="true"/>
+  <MRMessageSetID xmi:id="MRMessageSetID_1" repositoryId="-1900452578" messageSetId="1" level="1"/>
+</MSGModel:MRMessageSet>

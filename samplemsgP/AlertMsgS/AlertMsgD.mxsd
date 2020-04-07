@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <xsd:element name="AlertNumber">
+        <xsd:simpleType>
+            <xsd:restriction base="xsd:string">
+                <xsd:length value="3"/>
+            </xsd:restriction>
+        </xsd:simpleType>
+    </xsd:element>
+    <xsd:element name="SMSMessage">
+        <xsd:simpleType>
+            <xsd:restriction base="xsd:string">
+                <xsd:length value="160"/>
+            </xsd:restriction>
+        </xsd:simpleType>
+    </xsd:element>
+    <xsd:element name="QueueName">
+        <xsd:simpleType>
+            <xsd:restriction base="xsd:string">
+                <xsd:length value="48"/>
+            </xsd:restriction>
+        </xsd:simpleType>
+    </xsd:element>
+    <xsd:element name="MsgCNumber">
+        <xsd:simpleType>
+            <xsd:restriction base="xsd:string">
+                <xsd:length value="10"/>
+            </xsd:restriction>
+        </xsd:simpleType>
+    </xsd:element>
+    <xsd:group name="Request">
+        <xsd:sequence>
+            <xsd:element ref="AlertNumber">
+                <xsd:annotation>
+                    <xsd:appinfo source="WMQI_APPINFO">
+                        <cwfInclRep messageSetDefaultRep="CWF1">
+                            <cwfSimpleRep
+                                encodingNull="NullLogicalValue"
+                                lengthUnits="Bytes"
+                                mrLengthEncoding="fixedLength"
+                                paddingCharacter="SPACE"
+                                stringJustification="leftJustify"
+                                typeName="MRCWFStringRep" width="3"/>
+                        </cwfInclRep>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:element>
+        </xsd:sequence>
+    </xsd:group>
+    <xsd:group name="Forward">
+        <xsd:sequence>
+            <xsd:element ref="AlertNumber">
+                <xsd:annotation>
+                    <xsd:appinfo source="WMQI_APPINFO">
+                        <cwfInclRep messageSetDefaultRep="CWF1">
+                            <cwfSimpleRep
+                                encodingNull="NullLogicalValue"
+                                lengthUnits="Bytes"
+                                mrLengthEncoding="fixedLength"
+                                paddingCharacter="&apos;0&apos;"
+                                stringJustification="rightJustify"
+                                typeName="MRCWFStringRep" width="3"/>
+                        </cwfInclRep>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:element>
+            <xsd:element ref="QueueName">
+                <xsd:annotation>
+                    <xsd:appinfo source="WMQI_APPINFO">
+                        <cwfInclRep messageSetDefaultRep="CWF1">
+                            <cwfSimpleRep
+                                encodingNull="NullLogicalValue"
+                                lengthUnits="Bytes"
+                                mrLengthEncoding="fixedLength"
+                                paddingCharacter="SPACE"
+                                stringJustification="rightJustify"
+                                typeName="MRCWFStringRep" width="48"/>
+                        </cwfInclRep>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:element>
+        </xsd:sequence>
+    </xsd:group>
+    <xsd:group name="Reply">
+        <xsd:sequence>
+            <xsd:element ref="AlertNumber"/>
+            <xsd:element ref="QManagerName"/>
+            <xsd:element ref="QueueName"/>
+            <xsd:element ref="MsgCNumber">
+                <xsd:annotation>
+                    <xsd:appinfo source="WMQI_APPINFO">
+                        <cwfInclRep messageSetDefaultRep="CWF1">
+                            <cwfSimpleRep
+                                encodingNull="NullLogicalValue"
+                                lengthUnits="Bytes"
+                                mrLengthEncoding="fixedLength"
+                                paddingCharacter="&apos;0&apos;"
+                                stringJustification="rightJustify"
+                                typeName="MRCWFStringRep" width="10"/>
+                        </cwfInclRep>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:element>
+        </xsd:sequence>
+    </xsd:group>
+    <xsd:group name="Response">
+        <xsd:sequence>
+            <xsd:element ref="SMSMessage">
+                <xsd:annotation>
+                    <xsd:appinfo source="WMQI_APPINFO">
+                        <cwfInclRep messageSetDefaultRep="CWF1">
+                            <cwfSimpleRep
+                                encodingNull="NullLogicalValue"
+                                lengthUnits="Bytes"
+                                mrLengthEncoding="fixedLength"
+                                paddingCharacter="SPACE"
+                                stringJustification="leftJustify"
+                                typeName="MRCWFStringRep" width="160"/>
+                        </cwfInclRep>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:element>
+        </xsd:sequence>
+    </xsd:group>
+    <xsd:element name="QManagerName">
+        <xsd:simpleType>
+            <xsd:restriction base="xsd:string">
+                <xsd:length value="48"/>
+            </xsd:restriction>
+        </xsd:simpleType>
+    </xsd:element>
+    <xsd:complexType name="complexType2">
+        <xsd:sequence>
+            <xsd:element ref="AlertNumber">
+                <xsd:annotation>
+                    <xsd:appinfo source="WMQI_APPINFO">
+                        <cwfInclRep messageSetDefaultRep="CWF1">
+                            <cwfSimpleRep
+                                encodingNull="NullLogicalValue"
+                                lengthUnits="Bytes"
+                                mrLengthEncoding="fixedLength"
+                                paddingCharacter="SPACE"
+                                stringJustification="leftJustify"
+                                typeName="MRCWFStringRep" width="3"/>
+                        </cwfInclRep>
+                    </xsd:appinfo>
+                </xsd:annotation>
+            </xsd:element>
+        </xsd:sequence>
+    </xsd:complexType>
+    <xsd:element name="Request" type="complexType2">
+        <xsd:annotation>
+            <xsd:appinfo source="WMQI_APPINFO">
+                <MRMessage messageDefinition="/Request;XSDElementDeclaration=5/"/>
+            </xsd:appinfo>
+        </xsd:annotation>
+    </xsd:element>
+    <xsd:complexType name="complexType3">
+        <xsd:sequence>
+            <xsd:element ref="AlertNumber"/>
+            <xsd:element ref="QueueName"/>
+        </xsd:sequence>
+    </xsd:complexType>
+    <xsd:element name="Forward" type="complexType3">
+        <xsd:annotation>
+            <xsd:appinfo source="WMQI_APPINFO">
+                <MRMessage messageDefinition="/Forward;XSDElementDeclaration=6/"/>
+            </xsd:appinfo>
+        </xsd:annotation>
+    </xsd:element>
+    <xsd:complexType name="complexType4">
+        <xsd:sequence>
+            <xsd:element ref="AlertNumber"/>
+            <xsd:element ref="QManagerName"/>
+            <xsd:element ref="QueueName"/>
+            <xsd:element ref="MsgCNumber"/>
+        </xsd:sequence>
+    </xsd:complexType>
+    <xsd:element name="Reply" type="complexType4">
+        <xsd:annotation>
+            <xsd:appinfo source="WMQI_APPINFO">
+                <MRMessage messageDefinition="/Reply;XSDElementDeclaration=7/"/>
+            </xsd:appinfo>
+        </xsd:annotation>
+    </xsd:element>
+    <xsd:complexType name="complexType5">
+        <xsd:sequence>
+            <xsd:element ref="SMSMessage"/>
+        </xsd:sequence>
+    </xsd:complexType>
+    <xsd:element name="Response" type="complexType5">
+        <xsd:annotation>
+            <xsd:appinfo source="WMQI_APPINFO">
+                <MRMessage messageDefinition="/Response;XSDElementDeclaration=8/"/>
+            </xsd:appinfo>
+        </xsd:annotation>
+    </xsd:element>
+</xsd:schema>
