@@ -1,0 +1,225 @@
+
+
+CREATE COMPUTE MODULE doPayment_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		 CALL CopyEntireMessage();
+		 
+		 DECLARE enVariables REFERENCE TO Environment.Variables ;
+		 DECLARE ch_getPayInfo, ch_isRefill, ch_ProfileID, ch_graceTrigQuery CHARACTER '';
+		 DECLARE amount INTEGER 0 ;
+		 
+		 SET amount = CAST(COALESCE(InputRoot.XMLNSC.MOBILY_BSL_SR.Amount, '0') AS DECIMAL) ;
+		 SET enVariables.amount = COALESCE(InputRoot.XMLNSC.MOBILY_BSL_SR.Amount, 0) ;
+		 
+		 SET ch_getPayInfo = 'SELECT p.CHANNEL_TRANS_ID,p.LINE_NUMBER, p.PAYMENT_REF_NUM_TO_REVERSE, p.AMOUNT, p.DEAL_NAME, p.ERROR_CODE, 
+		 											p.IS_NEW_CONTROL, p.SR_ID,ADJUSTMENT_TYPE, p.REASON_CODE,p.DEAL_START_DT,p.DEAL_END_DT, p.SKIP_BE,
+		 											p.ACCOUNT_NUMBER, p.FINAL_REPLY_QUEUE, p.FINAL_REPLY_QUEUE_MANAGER, p.IS_REFILL,FUNC_ID, 
+		 											p.IS_CLOSED_ACCOUNT,DAID, p.DAADJFLAG, p.PLANCATEGORY, p.PAID_BY,p.FEEFLAG FROM SR_PAYMENT_TBL p
+		 											WHERE p.SR_ID = ' ||''''||COALESCE(enVariables.srId, '')||'''';
+		 											
+		 SET enVariables.getPaymentInfo.SR_PAYMENT_TBL[] =  PASSTHRU(ch_getPayInfo);
+		 
+		   
+		 -- setPaymentStatus() logic pending -- Set payment request status with STATUS_SENT_TO_ONLINE_CHARGING (5071)
+		 -- Below is for further usage, Also need to update in transaction status
+		 SET enVariables.paymentstatus.code 		= '5071' ;
+		 SET enVariables.paymentstatus.description 	= 'STATUS_SENT_TO_ONLINE_CHARGING' ;
+		 SET enVariables.adjustmentType 			= COALESCE(enVariables.inputMsg.MOBILY_BSL_SR.AdjustmentType, '') ;
+		 SET ch_isRefill 							= COALESCE(enVariables.getPaymentInfo.SR_PAYMENT_TBL.IS_REFILL, '') ;
+		 SET enVariables.reasonCode		 			= COALESCE(enVariables.inputMsg.MOBILY_BSL_SR.AdjustmentCode,enVariables.inputMsg.MOBILY_BSL_SR.ReversalCode, '') ;
+		 SET enVariables.daid			 			= COALESCE(enVariables.inputMsg.MOBILY_BSL_SR.DAID, '') ;
+		 SET enVariables.errorCode		 			= COALESCE(enVariables.inputMsg.MOBILY_BSL_SR.ErrorCode, 1) ;
+		 
+		 
+		 IF LENGTH(ch_isRefill) > 0 THEN
+		 	
+		 	SET ch_ProfileID = getProfileId(amount) ;
+		 	SET enVariables.profileId = ch_ProfileID ;
+		 	
+		 END IF ;
+		 
+		 SET ch_graceTrigQuery = 'SELECT g.GRACE_PERIOD_TRIGGER FROM SR_PAYMENT_REASONS_TBL g WHERE g.CODE = ' || COALESCE(CAST(enVariables.reasonCode AS CHARACTER), '') || ' AND g.FUNC_ID=' || '106' ;
+		 
+		 SET enVariables.gracePeriodTrig.SR_PAYMENT_REASONS_TBL[]  = PASSTHRU(ch_graceTrigQuery) ;
+
+		 
+		 SET enVariables.gracePrdTrg 		= enVariables.gracePeriodTrig.SR_PAYMENT_REASONS_TBL.GRACE_PERIOD_TRIGGER ;
+		 
+		RETURN TRUE;
+	END;
+	
+	CREATE FUNCTION getProfileId (amount INTEGER ) RETURNS CHARACTER 
+	BEGIN
+		DECLARE profId CHARACTER '';
+		
+		IF amount < 5 THEN
+			SET profId = '9' ;
+		ELSEIF 5 <= amount AND amount < 10 	THEN
+			SET profId = '10' ;
+		ELSEIF 50 <= amount AND amount < 60 	THEN
+			SET profId = '21' ;
+		ELSEIF 100 <= amount AND amount < 120 THEN
+			SET profId = '22' ;
+		ELSEIF 240 <= amount AND amount < 300 THEN
+			SET profId = '19' ;
+		ELSEIF 300 <= amount AND amount < 20000 THEN
+			SET profId = '23' ;
+		ELSE
+			DECLARE temp INTEGER 0 ;
+			SET amount = COALESCE(amount, 0) ;
+			SET temp = (amount / 30) + 11 ;
+			IF temp > 23 THEN
+				SET profId = '23' ;
+			ELSE
+				SET profId = CAST(temp AS CHARACTER) ;
+			END IF ;
+		END IF ;
+		RETURN profId ;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+
+CREATE COMPUTE MODULE updatePayment_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		
+		DECLARE enVariables REFERENCE TO Environment.Variables ;
+		
+		CALL CopyEntireMessage();
+		DECLARE ch_AuditQuery, ch_outmsg, ch_inmsg CHARACTER '' ;
+		DECLARE bl_payLoad, bl_inpayload BLOB ;
+		SET bl_payLoad 	= ASBITSTREAM(InputRoot.XMLNSC ENCODING 273 CCSID 1208);
+		SET ch_outmsg 	= CAST(bl_payLoad AS CHARACTER CCSID 1208 ENCODING 273);
+		SET enVariables.ch_outMsg = ch_outmsg ;
+	
+		SET ch_inmsg 	= enVariables.ch_inmsg;
+		SET enVariables.msgId = SUBSTRING(CAST(InputRoot.MQMD.MsgId AS CHARACTER) FROM 3 FOR 48);
+		DECLARE paymentRequest REFERENCE TO enVariables.inputMsg.MOBILY_BSL_SR ;
+		
+		DECLARE trackingPoint REFERENCE TO enVariables ; -- STILL PENDING
+		
+		SET enVariables.updatePymnt= PASSTHRU('UPDATE SR_PAYMENT_TBL  SET LAST_UPDATE_TIME = ? , STATUS = ?, ERROR_CODE = ?   WHERE SR_ID = ? and status!=6' VALUES(CURRENT_TIMESTAMP, 5071, enVariables.errorCode, paymentRequest.ServiceRequestId));
+	
+		---Audit Entry--
+		SET enVariables.AuditEntry.SR_ID 			= paymentRequest.ServiceRequestId ;
+		SET enVariables.AuditEntry.CHANNEL_TRANS_ID = paymentRequest.ChannelTransId ;
+		SET enVariables.AuditEntry.LINE_NUMBER 		= paymentRequest.LineNumber ;
+		SET enVariables.AuditEntry.TRACKING_POINT 	= 6761 ;
+		SET enVariables.AuditEntry.TRACKING_POINT_STATUS = 1 ;
+		SET enVariables.AuditEntry.MESSAGE 			= ch_outmsg ;
+		SET enVariables.AuditEntry.MESSAGE_ID 		= enVariables.msgId ;
+		
+		CALL callAudit(enVariables.AuditEntry) ;
+		---
+		-- Insert Audit
+--		SET enVariables.new_Q=PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL  (ID, SR_ID, CHANNEL_TRANS_ID,  LINE_NUMBER,  TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,BE_REFERENCE_NUMBER,  NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID ) VALUES ( SR_PAYMENT_AUDIT_SEQ.NEXTVAL, ? , ?, ? , ? , ?, ?,  ?, ? , ? , ? , ? ,? )' VALUES(
+--			paymentRequest.ServiceRequestId,
+--			paymentRequest.ChannelTransId,
+--			paymentRequest.LineNumber,
+--			CURRENT_TIMESTAMP,
+--			6761, -- point code -- TRACKING_SFRT
+--			1, -- point status -- TRACKING_POINT_SUCCESS_STATUS
+--			null, null,
+--			ch_outmsg,
+--				null,null,
+--				null -- message ID
+--				));
+		
+--		SET enVariables.new_Q = 
+--		PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL (ID, SR_ID, CHANNEL_TRANS_ID, LINE_NUMBER,TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,
+--				BE_REFERENCE_NUMBER, NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID) VALUES(SR_PAYMENT_AUDIT_SEQ.NEXTVAL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+--				VALUES ( COALESCE(paymentRequest.ServiceRequestId, ''),paymentRequest.ChannelTransId,paymentRequest.LineNumber, CURRENT_TIMESTAMP, 
+--				6761,1, null ,null, 
+--				ch_outmsg, null, null, null)) ;-- In case of the exception the trackingPoint.PointStatus will be TRACKING_POINT_FAILED_STATUS (2)
+		-- portal payment retry
+		SET enVariables.new_QR = 
+		PASSTHRU('INSERT INTO SR_PAYMENT_RETRY_TBL (SR_ID, MESSAGE, COUNTER, TIMESTAMP, BE_QUEUE_NAME, STATUS, FUNC_ID ) VALUES (?, ?, ?, ?, ?, ?, ?) '
+				VALUES ( paymentRequest.ServiceRequestId , ch_inmsg , 0 , CURRENT_TIMESTAMP ,enVariables.BEsrcCode ,0, '105' )); 
+		
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+	
+CREATE PROCEDURE callAudit(IN env REFERENCE) BEGIN
+		SET env.ActualData = OutputRoot ;
+		SET OutputRoot.XMLNSC = NULL ;
+		CALL createAuditMessage_DOP(env) ;
+		SET OutputRoot.XMLNSC = env.OutputRoot.XMLNSC ;
+		PROPAGATE TO LABEL 'AUDIT' DELETE NONE ;
+		SET OutputRoot = env.ActualData ;
+		SET env.OutputRoot = NULL ;
+		SET env.ActualData = NULL ;
+	END;
+	
+	
+	 
+     
+CREATE PROCEDURE createAuditMessage_DOP(IN env REFERENCE) BEGIN
+
+--              SET enVariables.OUTPUTROOT = OutputRoot ;
+--
+--              SET OutputRoot.XMLNSC = NULL ;
+
+              CREATE LASTCHILD OF env.OutputRoot.XMLNSC NAME 'InsertPaymentAudit' ;
+              DECLARE outAud REFERENCE TO env.OutputRoot.XMLNSC.InsertPaymentAudit ;
+
+              SET outAud.SR_ID                  = env.SR_ID ;
+              SET outAud.CHANNEL_TRANS_ID       = env.CHANNEL_TRANS_ID ;
+              SET outAud.LINE_NUMBER            = env.LINE_NUMBER ;
+              SET outAud.TRACKING_POINT         = env.TRACKING_POINT ;
+              SET outAud.TRACKING_POINT_STATUS	= env.TRACKING_POINT_STATUS ;
+              SET outAud.BE_REFERENCE_NUMBER    = env.BE_REFERENCE_NUMBER ;
+              SET outAud.NEW_BALANCE            = env.Variables.NEW_BALANCE ;              
+              SET outAud.MESSAGE                =CAST(COALESCE(env.AuditMsg,  env.MESSAGE) AS CHAR CCSID 1208) ;
+              SET outAud.BE_REFERENCE_ID        = env.BE_REFERENCE_ID ;
+              SET outAud.BE_REFERENCE_TYPE      = env.BE_REFERENCE_TYPE ;
+              SET outAud.MESSAGE_ID             = env.MESSAGE_ID ;
+
+             
+
+--              PROPAGATE TO LABEL 'AUDIT' DELETE NONE ;
+--
+--              SET OutputRoot.XMLNSC = NULL ;
+--
+--              SET OutputRoot = enVariables.OUTPUTROOT ;
+--
+--              SET enVariables.OUTPUTROOT = NULL ;
+
+       END;
+     
+	
+	
+	
+
+END MODULE;

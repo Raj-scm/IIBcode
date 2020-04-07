@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI" xmlns:ComIbmCompute.msgnode="ComIbmCompute.msgnode" xmlns:ComIbmLabel.msgnode="ComIbmLabel.msgnode" xmlns:ComIbmMQOutput.msgnode="ComIbmMQOutput.msgnode" xmlns:FlowInput.msgflow="FlowInput.msgflow" xmlns:MQAsyncCall.msgflow="MQAsyncCall.msgflow" xmlns:StatusUpdate.subflow="StatusUpdate.subflow" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" xmlns:eflow="http://www.ibm.com/wbi/2005/eflow" xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" nsURI="PortalPurchaseDealService.msgflow"
+    nsPrefix="PortalPurchaseDealService.msgflow">
+  <eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1">
+    <eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.ppd_replayThresholdCnt" name="ppd_replayThresholdCnt" lowerBound="1" defaultValueLiteral="3">
+      <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eStructuralFeatures>
+    <translation xmi:type="utility:TranslatableString" key="PortalPurchaseDealService" bundleName="PortalPurchaseDealService" pluginId="AdjustmentAndReversalCommon"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/AdjustmentAndReversalCommon/icons/full/obj16/PortalPurchaseDealService.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/AdjustmentAndReversalCommon/icons/full/obj30/PortalPurchaseDealService.gif"/>
+    <composition>
+      <nodes xmi:type="FlowInput.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_1" location="86,179" queueName="MOBILY.FUNC.PAYMENTS.NEWCTRL.PORTAL.INT.REQ.NEW" transactionMode="no" messageDomain="BLOB" resetMessageSet="true" resetMessageType="true">
+        <translation xmi:type="utility:ConstantString" string="PortalPurchaseDeal Request"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" location="189,290" dataSource="EAIDBBSL" computeExpression="esql://routine/#PortalPurchaseDealService.Main" computeMode="destinationAndMessage">
+        <translation xmi:type="utility:ConstantString" string="Parse and Enrich Message"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" location="595,38" dataSource="EAIDBBSL" computeExpression="esql://routine/#ConstructErrorMessagePortalPuchaseDeal.Main" computeMode="destinationAndMessage">
+        <translation xmi:type="utility:ConstantString" string="ConstructErrorMessage"/>
+      </nodes>
+      <nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_4" location="879,33" queueName="REVERSAL.EXCEPTIONS.REQ.NEW" transactionMode="no">
+        <translation xmi:type="utility:ConstantString" string="Failure MQ Output"/>
+      </nodes>
+      <nodes xmi:type="MQAsyncCall.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_5" location="497,290" MQAsyncCall_DestinationQueue="MOBILY.FUNC.SUPPLEMENTARYSVC.PORTAL.REQUEST" queueName="MOBILY.FUNC.PAYMENTS.NEWCTRL.PORTAL.REPLY.NEW" messageDomain="XMLNSC" resetMessageDomain="true">
+        <translation xmi:type="utility:ConstantString" string="MQAsyncCall"/>
+      </nodes>
+      <nodes xmi:type="StatusUpdate.subflow:FCMComposite_1" xmi:id="FCMComposite_1_6" location="362,173">
+        <translation xmi:type="utility:ConstantString" string="StatusUpdate"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_7" location="577,165" dataSource="EAIDBBSL" computeExpression="esql://routine/#PPD_ReplyMessageProcessing.Main">
+        <translation xmi:type="utility:ConstantString" string="ReplyMessageProcessing"/>
+      </nodes>
+      <nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_8" location="838,423" queueName="AUDIT.QUEUE.REQ.NEW" transactionMode="no">
+        <translation xmi:type="utility:ConstantString" string="AUDIT.QUEUE.REQ.NEW"/>
+      </nodes>
+      <nodes xmi:type="ComIbmLabel.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_9" location="587,424" labelName="AUDIT">
+        <translation xmi:type="utility:ConstantString" string="AUDIT"/>
+      </nodes>
+      <nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_10" location="840,281" queueName="MOBILY.MEDIATOR.NOTIFICATION.REQUEST" transactionMode="no">
+        <translation xmi:type="utility:ConstantString" string="MQ Output"/>
+      </nodes>
+      <nodes xmi:type="ComIbmLabel.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_11" location="665,279" labelName="MEDIA">
+        <translation xmi:type="utility:ConstantString" string="MEDIA"/>
+      </nodes>
+      <nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_12" location="870,116" destinationMode="list" transactionMode="no">
+        <translation xmi:type="utility:ConstantString" string="Replay Queue"/>
+      </nodes>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" targetNode="FCMComposite_1_5" sourceNode="FCMComposite_1_6" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" targetNode="FCMComposite_1_7" sourceNode="FCMComposite_1_5" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" targetNode="FCMComposite_1_8" sourceNode="FCMComposite_1_9" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_8" targetNode="FCMComposite_1_10" sourceNode="FCMComposite_1_11" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_9" targetNode="FCMComposite_1_12" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.out1" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_10" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_5" sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_11" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_7" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_12" targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_6" sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.in"/>
+    </composition>
+    <propertyOrganizer>
+      <propertyDescriptor groupName="Group.Basic" configurable="true" userDefined="true" describedAttribute="Property.ppd_replayThresholdCnt">
+        <propertyName xmi:type="utility:TranslatableString" key="Property.ppd_replayThresholdCnt" bundleName="PortalPurchaseDealService" pluginId="AdjustmentAndReversalCommon"/>
+      </propertyDescriptor>
+    </propertyOrganizer>
+    <stickyBoard/>
+  </eClassifiers>
+</ecore:EPackage>

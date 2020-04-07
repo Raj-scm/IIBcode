@@ -1,0 +1,239 @@
+  
+
+CREATE COMPUTE MODULE AdjustmentsWrapper_LoadParameters
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyEntireMessage();
+		
+		SET Environment.Variables.LoadParameters.FuncId = Environment.Variables.SiebelRq."Function Id";
+		
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+
+
+CREATE COMPUTE MODULE AdjustmentsWrapper_AuditRequest
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyEntireMessage();
+		
+		--generate the adjustments reference number
+		SET Environment.Variables.Passthru[] 			= PASSTHRU('SELECT ADJUSTMENSTS_WRAPPER_SEQ.NEXTVAL FROM DUAL');
+		SET Environment.Variables.Passthru.EAISequence 	= CAST(Environment.Variables.Passthru.NEXTVAL AS INTEGER);
+		SET Environment.Variables.Passthru.EAISequence	= 'SR_ADWR_' || CAST(Environment.Variables.Passthru.EAISequence AS CHARACTER); 
+		
+		SET Environment.Variables.SRID			= COALESCE(Environment.Variables.Passthru.EAISequence
+															, SUBSTRING(Cast(InputRoot.MQMD.MsgId as CHARACTER) FROM 3 FOR 48));
+		
+		SET Environment.Variables.AuditRequest.SRID 		= Environment.Variables.SRID;
+
+		SET Environment.Variables.AuditRequest.MessageType	= COALESCE(Environment.Variables.Parameters.FuncName,'CRM_TRANS')||'_Request';
+    	SET Environment.Variables.AuditRequest.FuncId 		= COALESCE(Environment.Variables.LoadParameters.FuncId,'');
+    	SET Environment.Variables.AuditRequest.TableName	= COALESCE(Environment.Variables.Parameters.{Environment.Variables.Parameters.FuncName}.AUDIT_TABLE,'SR_CRM_TRANS_AUDIT_TBL');
+    	SET Environment.Variables.AuditRequest.MSISDN 		= COALESCE(Environment.Variables.SiebelRq.MSISDN,'');
+        SET Environment.Variables.AuditRequest.TrackPointId = '10238';        
+        SET Environment.Variables.AuditRequest.Status 		= COALESCE(Environment.Variables.ErrorCode,'0');
+
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE COMPUTE MODULE AdjustmentsWrapper_AuditReply
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN 
+		CALL CopyEntireMessage();
+		
+		SET Environment.Variables.AuditRequest.SRID 		= Environment.Variables.SRID;
+		SET Environment.Variables.AuditRequest.MessageType	= COALESCE(Environment.Variables.Parameters.FuncName,'CRM_TRANS')||'_Reply';
+        SET Environment.Variables.AuditRequest.FuncId 		= COALESCE(Environment.Variables.LoadParameters.FuncId,'');
+        SET Environment.Variables.AuditRequest.TrackPointId = '10239';
+        SET Environment.Variables.AuditRequest.MSISDN 		= COALESCE(Environment.Variables.SiebelRq.MSISDN);
+        SET Environment.Variables.AuditRequest.Status 		= Environment.Variables.ErrorCode;
+        SET Environment.Variables.AuditRequest.TableName	= COALESCE(Environment.Variables.Parameters.{Environment.Variables.Parameters.FuncName}.AUDIT_TABLE,'SR_CRM_TRANS_AUDIT_TBL');        
+        
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+CREATE COMPUTE MODULE AdjustmentsWrapper_Distributer
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyEntireMessage();
+		
+		SET OutputLocalEnvironment.Destination.RouterList.DestinationData.labelname = Environment.Variables.Parameters.{Environment.Variables.Parameters.FuncName}.LABEL_NAME;		
+		
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+
+CREATE COMPUTE MODULE AdjustmentsWrapper_Map_AdjustmentsWrapperInqCMPRs
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- the commented lines are the fields which cannot be retrieved from IN
+		CALL CopyEntireMessage();
+		SET Environment.Variables.ReplyMsg = '';
+		SET Environment.Variables.ErrorCode = '0000';		
+
+		
+		CALL CRMTransformationResponseMessageAddItem(Environment.Variables.ReplyMsg,1,'Status','1');
+		CALL CRMTransformationResponseMessageAddItem(Environment.Variables.ReplyMsg,1,'Error Code',COALESCE(Environment.Variables.AdjustmentsCallerCMPRs.ErrorCode,''));
+		CALL CRMTransformationResponseMessageAddItem(Environment.Variables.ReplyMsg,1,'Error Message',COALESCE(Environment.Variables.AdjustmentsCallerCMPRs.ErrorMsg,''));
+
+
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE FILTER MODULE AdjustmentsWrapper_AuditRequest_Filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		RETURN COALESCE(Environment.Variables.Parameters.FuncName,'') = '';
+	END;
+
+END MODULE;
+
+
+CREATE COMPUTE MODULE AdjustmentsWrapper_AuditException
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		SET OutputRoot.Properties = InputRoot.Properties;
+		SET OutputRoot.MQMD = InputRoot.MQMD;
+		SET OutputRoot.BLOB.BLOB = CAST (Environment.Variables.ErrorInfo.CompleteErrorMsg AS BLOB CCSID 1208 ENCODING 546 );
+		
+		SET Environment.Variables.AuditRequest.SRID 		= Environment.Variables.SRID;
+		SET Environment.Variables.AuditRequest.MessageType	= 'UNKNOWN_EXCEPTION';
+        SET Environment.Variables.AuditRequest.FuncId 		= COALESCE(Environment.Variables.LoadParameters.FuncId,'');
+        SET Environment.Variables.AuditRequest.TrackPointId = '10240';
+        SET Environment.Variables.AuditRequest.MSISDN 		= COALESCE(Environment.Variables.SiebelRq.MSISDN,'');
+        SET Environment.Variables.AuditRequest.Status 		= '9999';
+        SET Environment.Variables.AuditRequest.TableName	= COALESCE(Environment.Variables.Parameters.{Environment.Variables.Parameters.FuncName}.AUDIT_TABLE,'SR_CRM_TRANS_AUDIT_TBL');
+        
+        SET Environment.Variables.ErrorCode = '8451';
+        SET Environment.Variables.ErrorMessage = 'Unknown EAI Exception';
+		
+		RETURN TRUE;
+	END;
+END MODULE;
+
+
+
+
+
+
+
+
+
+
+CREATE COMPUTE MODULE AdjustmentsWrapper_AdjustmentsCallerCMP
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		CALL CopyEntireMessage();
+		
+		
+		
+		SET Environment.Variables.AdjustmentsCallerCMP.MSISDN = Environment.Variables.SiebelRq.MSISDN ;
+		SET Environment.Variables.AdjustmentsCallerCMP.RequestQueue = 'MOBILY.FUNC.ADJUSTMENTPAYMENT.REQUEST';
+		SET Environment.Variables.AdjustmentsCallerCMP.ReplyToQ     = 'MOBILY.FUNC.ADJUSTMENT.WRAPPER.MQGET.REPLY';
+		SET Environment.Variables.AdjustmentsCallerCMP.AuditFlag = COALESCE(Environment.Variables.Parameters.{Environment.Variables.Parameters.FuncName}.DEBUG, 'FALSE');
+		SET Environment.Variables.AdjustmentsCallerCMP.SRID = Environment.Variables.SRID;
+		SET Environment.Variables.AdjustmentsCallerCMP.FuncID = COALESCE(Environment.Variables.LoadParameters.FuncId,'');
+        SET Environment.Variables.AdjustmentsCallerCMP.msisdn = COALESCE(Environment.Variables.SiebelRq.MSISDN,'');
+        SET Environment.Variables.AdjustmentsCallerCMP.TableName = COALESCE(Environment.Variables.Parameters.{Environment.Variables.Parameters.FuncName}.AUDIT_TABLE,'SR_CRM_TRANS_AUDIT_TBL');
+        
+        SET Environment.Variables.AdjustmentsCallerCMPRq.RequestorChannelId = COALESCE(Environment.Variables.SiebelRq.Channel, 'SIEBEL');
+        SET Environment.Variables.AdjustmentsCallerCMPRq.RequestorUserId 	= COALESCE(Environment.Variables.SiebelRq.User
+        																			, Environment.Variables.SiebelRq."Login Id"
+        																			, '');
+        SET Environment.Variables.AdjustmentsCallerCMPRq.ChannelTransId 	= COALESCE(Environment.Variables.SRID, '');
+		SET Environment.Variables.AdjustmentsCallerCMPRq.MSISDN 			= COALESCE(Environment.Variables.SiebelRq.MSISDN,'');
+		SET Environment.Variables.AdjustmentsCallerCMPRq.Amount 			= COALESCE(Environment.Variables.SiebelRq.Amount,'');
+		SET Environment.Variables.AdjustmentsCallerCMPRq."Transaction Type" = COALESCE(Environment.Variables.SiebelRq."Transaction Type",'');
+		SET Environment.Variables.AdjustmentsCallerCMPRq.Reason				= COALESCE(Environment.Variables.SiebelRq.Reason,'');
+		SET Environment.Variables.AdjustmentsCallerCMPRq.Comment			= COALESCE(Environment.Variables.SiebelRq.Comment,'');
+
+        
+		
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;

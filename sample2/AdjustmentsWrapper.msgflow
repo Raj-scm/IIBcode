@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI" xmlns:AdjustmentsCallerCMP.msgflow="AdjustmentsCallerCMP.msgflow" xmlns:CRMTransformationReplyCMP.msgflow="CRMTransformationReplyCMP.msgflow" xmlns:CRMTransformationValidatorCMP.msgflow="CRMTransformationValidatorCMP.msgflow" xmlns:ComIbmCompute.msgnode="ComIbmCompute.msgnode" xmlns:ComIbmFilter.msgnode="ComIbmFilter.msgnode" xmlns:ComIbmLabel.msgnode="ComIbmLabel.msgnode" xmlns:ComIbmMQReply.msgnode="ComIbmMQReply.msgnode" xmlns:ComIbmRouteToLabel.msgnode="ComIbmRouteToLabel.msgnode"
+    xmlns:CommonAuditRequest.msgflow="CommonAuditRequest.msgflow" xmlns:FlowInput.msgflow="FlowInput.msgflow" xmlns:LoadParameters.msgflow="LoadParameters.msgflow" xmlns:SiebelInputParserCMP.msgflow="SiebelInputParserCMP.msgflow" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" xmlns:eflow="http://www.ibm.com/wbi/2005/eflow" xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" nsURI="AdjustmentsWrapper.msgflow"
+    nsPrefix="AdjustmentsWrapper.msgflow">
+  <eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1">
+    <eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
+    <translation xmi:type="utility:TranslatableString" key="AdjustmentsWrapper" bundleName="AdjustmentsWrapper" pluginId="AdjustmentsWrapperMFPrj"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/AdjustmentsWrapperMFPrj/icons/full/obj16/AdjustmentsWrapper.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/AdjustmentsWrapperMFPrj/icons/full/obj30/AdjustmentsWrapper.gif"/>
+    <composition>
+      <nodes xmi:type="LoadParameters.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_4" location="197,20" PreLoadParameters="esql://routine/#AdjustmentsWrapper_LoadParameters.Main">
+        <translation xmi:type="utility:ConstantString" string="LoadParameters"/>
+      </nodes>
+      <nodes xmi:type="CommonAuditRequest.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_5" location="327,75" PreAuditRequest="esql://routine/#AdjustmentsWrapper_AuditRequest.Main">
+        <translation xmi:type="utility:ConstantString" string="AuditRequest1"/>
+      </nodes>
+      <nodes xmi:type="CommonAuditRequest.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_6" location="1190,119" PreAuditRequest="esql://routine/#AdjustmentsWrapper_AuditReply.Main">
+        <translation xmi:type="utility:ConstantString" string="AuditReply"/>
+      </nodes>
+      <nodes xmi:type="ComIbmMQReply.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_10" location="1139,23">
+        <translation xmi:type="utility:ConstantString" string="MQReply"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_11" location="524,37" computeExpression="esql://routine/#AdjustmentsWrapper_Distributer.Main" computeMode="all">
+        <translation xmi:type="utility:ConstantString" string="Distributer"/>
+      </nodes>
+      <nodes xmi:type="ComIbmLabel.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_12" location="598,322" labelName="ADJUSTMENTS_WRAPPER">
+        <translation xmi:type="utility:ConstantString" string="ADJUSTMENTS_WRAPPER"/>
+      </nodes>
+      <nodes xmi:type="ComIbmRouteToLabel.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_13" location="623,38">
+        <translation xmi:type="utility:ConstantString" string="RouteToLabel"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" location="880,325" dataSource="EAIDBOR" computeExpression="esql://routine/#AdjustmentsWrapper_Map_AdjustmentsWrapperInqCMPRs.Main">
+        <translation xmi:type="utility:ConstantString" string="Map AdjustmentsWrapperInqCMPRs"/>
+      </nodes>
+      <nodes xmi:type="FlowInput.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_1" location="26,263" queueName="MOBILY.FUNC.ADJUSTMENT.WRAPPER.REQUEST" messageDomain="XMLNSC" resetMessageDomain="true" filePath="/home/wbimbprd/Trace/AdjustmentsWrapperExceptionFile.log">
+        <translation xmi:type="utility:ConstantString" string="FlowInput"/>
+      </nodes>
+      <nodes xmi:type="CommonAuditRequest.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_9" location="336,228" PreAuditRequest="esql://routine/#AdjustmentsWrapper_AuditRequest.Main">
+        <translation xmi:type="utility:ConstantString" string="AuditRequest2"/>
+      </nodes>
+      <nodes xmi:type="ComIbmFilter.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_16" location="322,302" filterExpression="esql://routine/#AdjustmentsWrapper_AuditRequest_Filter.Main">
+        <translation xmi:type="utility:ConstantString" string="AuditRequest?"/>
+      </nodes>
+      <nodes xmi:type="CommonAuditRequest.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_17" location="412,319" PreAuditRequest="esql://routine/#AdjustmentsWrapper_AuditRequest.Main">
+        <translation xmi:type="utility:ConstantString" string="AuditRequest"/>
+      </nodes>
+      <nodes xmi:type="CommonAuditRequest.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_18" location="510,212" PreAuditRequest="esql://routine/#AdjustmentsWrapper_AuditException.Main">
+        <translation xmi:type="utility:ConstantString" string="AuditException"/>
+      </nodes>
+      <nodes xmi:type="SiebelInputParserCMP.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_19" location="84,143">
+        <translation xmi:type="utility:ConstantString" string="SiebelInputParserCMP"/>
+      </nodes>
+      <nodes xmi:type="CRMTransformationReplyCMP.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_21" location="1004,91">
+        <translation xmi:type="utility:ConstantString" string="CRMTransformationReplyCMP"/>
+      </nodes>
+      <nodes xmi:type="CRMTransformationValidatorCMP.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_22" location="394,139">
+        <translation xmi:type="utility:ConstantString" string="CRMTransformationValidatorCMP"/>
+      </nodes>
+      <nodes xmi:type="AdjustmentsCallerCMP.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_24" location="746,400" Preprocessing="esql://routine/#AdjustmentsWrapper_AdjustmentsCallerCMP.Main">
+        <translation xmi:type="utility:ConstantString" string="AdjustmentsCallerCMP"/>
+      </nodes>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" targetNode="FCMComposite_1_5" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_13" targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_10" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_15" targetNode="FCMComposite_1_13" sourceNode="FCMComposite_1_11" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_22" targetNode="FCMComposite_1_16" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_23" targetNode="FCMComposite_1_17" sourceNode="FCMComposite_1_16" sourceTerminalName="OutTerminal.true" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_24" targetNode="FCMComposite_1_18" sourceNode="FCMComposite_1_16" sourceTerminalName="OutTerminal.false" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_25" targetNode="FCMComposite_1_18" sourceNode="FCMComposite_1_17" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" targetNode="FCMComposite_1_19" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_9" targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_19" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_10" targetNode="FCMComposite_1_9" sourceNode="FCMComposite_1_19" sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_28" targetNode="FCMComposite_1_21" sourceNode="FCMComposite_1_13" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_30" targetNode="FCMComposite_1_21" sourceNode="FCMComposite_1_18" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_31" targetNode="FCMComposite_1_21" sourceNode="FCMComposite_1_9" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_32" targetNode="FCMComposite_1_10" sourceNode="FCMComposite_1_21" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_36" targetNode="FCMComposite_1_21" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_37" targetNode="FCMComposite_1_22" sourceNode="FCMComposite_1_5" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_38" targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_22" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_39" targetNode="FCMComposite_1_21" sourceNode="FCMComposite_1_22" sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_18" targetNode="FCMComposite_1_24" sourceNode="FCMComposite_1_12" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_19" targetNode="FCMComposite_1_21" sourceNode="FCMComposite_1_24" sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_21" targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_24" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+    </composition>
+    <propertyOrganizer/>
+    <stickyBoard/>
+  </eClassifiers>
+</ecore:EPackage>

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0"
+    xmlns:xmi="http://www.omg.org/XMI" xmlns:ComIbmCompute.msgnode="ComIbmCompute.msgnode" xmlns:ComIbmLabel.msgnode="ComIbmLabel.msgnode" xmlns:ComIbmMQOutput.msgnode="ComIbmMQOutput.msgnode" xmlns:FlowInput.msgflow="FlowInput.msgflow" xmlns:FlowOutput.msgflow="FlowOutput.msgflow" xmlns:MQAsyncCall.msgflow="MQAsyncCall.msgflow" xmlns:doPayment.subflow="doPayment.subflow" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" xmlns:eflow="http://www.ibm.com/wbi/2005/eflow" xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" nsURI="OnlineChargeService.msgflow"
+    nsPrefix="OnlineChargeService.msgflow">
+  <eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1">
+    <eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.Oc_replayThresholdCnt" name="Oc_replayThresholdCnt" lowerBound="1" defaultValueLiteral="3">
+      <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eStructuralFeatures>
+    <translation xmi:type="utility:TranslatableString" key="OnlineChargeService" bundleName="OnlineChargeService" pluginId="AdjustmentAndReversalCommon"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/AdjustmentAndReversalCommon/icons/full/obj16/OnlineChargeService.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/AdjustmentAndReversalCommon/icons/full/obj30/OnlineChargeService.gif"/>
+    <composition>
+      <nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" location="673,60" queueName="REVERSAL.EXCEPTIONS.REQ.NEW" transactionMode="no">
+        <translation xmi:type="utility:ConstantString" string="Failure MQ Output"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" location="284,60" dataSource="EAIDBBSL" computeExpression="esql://routine/#ConstructErrorMessage_Compute.Main" computeMode="all">
+        <translation xmi:type="utility:ConstantString" string="Construct Error Message"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_4" location="119,357" dataSource="EAIDBBSL" connectDatasourceBeforeFlowStarts="true" computeExpression="esql://routine/#ParseAndEnrichMessage_Compute.Main" computeMode="all">
+        <translation xmi:type="utility:ConstantString" string="Parse and Enrich Message"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_7" location="502,490" rotation="RIGHT_TO_LEFT" dataSource="EAIDBBSL" computeExpression="esql://routine/#OnlineChargeService_Sender_Compute.Main">
+        <translation xmi:type="utility:ConstantString" string="Error_Audit"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_9" location="623,190" dataSource="EAIDBBSL" computeExpression="esql://routine/#OnlineChargeService_ReplyProcessing.Main" computeMode="destinationAndMessage">
+        <translation xmi:type="utility:ConstantString" string="ReplyMessageProcessing"/>
+      </nodes>
+      <nodes xmi:type="ComIbmLabel.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_12" location="922,325" labelName="SFRT">
+        <translation xmi:type="utility:ConstantString" string="SFRT"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_13" location="1074,325" dataSource="EAIDBBSL" computeExpression="esql://routine/#SFRT_Message.Main" computeMode="destinationAndMessage">
+        <translation xmi:type="utility:ConstantString" string="SFRT Request Create"/>
+      </nodes>
+      <nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_14" location="1332,324" destinationMode="list" transactionMode="no">
+        <translation xmi:type="utility:ConstantString" string="MQ Output"/>
+      </nodes>
+      <nodes xmi:type="FlowInput.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_1" location="72,178" queueName="MOBILY.FUNC.ADJ.INT.ONLINE.RECHARGE.REQ.NEW" transactionMode="no" messageDomain="XMLNSC" resetMessageDomain="true">
+        <translation xmi:type="utility:ConstantString" string="Online Charge FlowInput"/>
+      </nodes>
+      <nodes xmi:type="MQAsyncCall.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_5" location="447,316" MQAsyncCall_DestinationQueue="SFBAOC.RQ" queueName="MOBILY.FUNC.ADJ.ONLINE.RECHARGE.REPLY.NEW" messageDomain="XMLNSC" resetMessageDomain="true">
+        <translation xmi:type="utility:ConstantString" string="MQAsyncCall1"/>
+      </nodes>
+      <nodes xmi:type="FlowOutput.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_8" location="690,347" queueName="INTERNAL.FUNC.ADJ.PAYMENTS.NEWCONTROL.REQ.NEW" destinationMode="list">
+        <translation xmi:type="utility:ConstantString" string="PaymentNewControl_Request"/>
+      </nodes>
+      <nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_10" location="1101,238" queueName="AUDIT.QUEUE.REQ.NEW" transactionMode="no">
+        <translation xmi:type="utility:ConstantString" string="AUDIT.QUEUE.REQ.NEW"/>
+      </nodes>
+      <nodes xmi:type="ComIbmLabel.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_11" location="924,237" labelName="AUDIT">
+        <translation xmi:type="utility:ConstantString" string="AUDIT"/>
+      </nodes>
+      <nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_15" location="614,127" destinationMode="list" transactionMode="no">
+        <translation xmi:type="utility:ConstantString" string="Replay Queue"/>
+      </nodes>
+      <nodes xmi:type="ComIbmLabel.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_16" location="920,142" labelName="MEDIA">
+        <translation xmi:type="utility:ConstantString" string="MEDIA"/>
+      </nodes>
+      <nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_17" location="1091,141" queueName="MOBILY.MEDIATOR.NOTIFICATION.REQUEST">
+        <translation xmi:type="utility:ConstantString" string="MEDIATION"/>
+      </nodes>
+      <nodes xmi:type="doPayment.subflow:FCMComposite_1" xmi:id="FCMComposite_1_6" location="312,264">
+        <translation xmi:type="utility:ConstantString" string="doPayment"/>
+      </nodes>
+      <nodes xmi:type="ComIbmLabel.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_18" location="911,56" labelName="ERPUPDATE">
+        <translation xmi:type="utility:ConstantString" string="ERPUPDATE"/>
+      </nodes>
+      <nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_19" location="1069,56" queueName="PAYMENT.NOTIFICATION.REQUEST.UPDATE.ERP">
+        <translation xmi:type="utility:ConstantString" string="ERP_QUEUE"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_20" location="765,256" dataSource="EAIDBOR" computeExpression="esql://routine/#OnlineChargeService_Compute.Main">
+        <translation xmi:type="utility:ConstantString" string="Compute"/>
+      </nodes>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" targetNode="FCMComposite_1_14" sourceNode="FCMComposite_1_13" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" targetNode="FCMComposite_1_13" sourceNode="FCMComposite_1_12" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" targetNode="FCMComposite_1_9" sourceNode="FCMComposite_1_5" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_5" sourceTerminalName="OutTerminal.Output1" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_8" targetNode="FCMComposite_1_8" sourceNode="FCMComposite_1_9" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_9" targetNode="FCMComposite_1_7" sourceNode="FCMComposite_1_8" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_10" targetNode="FCMComposite_1_10" sourceNode="FCMComposite_1_11" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_11" targetNode="FCMComposite_1_15" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.out1" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_12" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_7" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_13" targetNode="FCMComposite_1_17" sourceNode="FCMComposite_1_16" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_14" targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_15" targetNode="FCMComposite_1_5" sourceNode="FCMComposite_1_6" sourceTerminalName="OutTerminal.Output" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_16" targetNode="FCMComposite_1_19" sourceNode="FCMComposite_1_18" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_17" targetNode="FCMComposite_1_20" sourceNode="FCMComposite_1_9" sourceTerminalName="OutTerminal.out2" targetTerminalName="InTerminal.in"/>
+    </composition>
+    <propertyOrganizer>
+      <propertyDescriptor groupName="Group.Basic" configurable="true" userDefined="true" describedAttribute="Property.Oc_replayThresholdCnt">
+        <propertyName xmi:type="utility:TranslatableString" key="Property.Oc_replayThresholdCnt" bundleName="OnlineChargeService" pluginId="AdjustmentAndReversalCommon"/>
+      </propertyDescriptor>
+    </propertyOrganizer>
+    <stickyBoard/>
+  </eClassifiers>
+</ecore:EPackage>

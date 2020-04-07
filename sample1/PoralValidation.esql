@@ -1,0 +1,311 @@
+
+
+CREATE COMPUTE MODULE PoralValidation
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyMessageHeaders();
+		SET OutputRoot.MQMD.CorrelId = InputRoot.MQMD.MsgId ;
+		SET OutputRoot.MQMD.ReplyToQ =  'MOBILY.ADJUSTMENT.INQ.PORTAL.VALIDATE.REPLY';
+		SET OutputRoot.MQMD.ReplyToQMgr	= '';
+		DECLARE enVariables REFERENCE TO Environment.Variables ;
+		
+		DECLARE inMsg REFERENCE TO InputRoot.XMLNSC.MOBILY_BSL_SR ;
+		
+		CREATE LASTCHILD OF OutputRoot.XMLNSC NAME 'MOBILY_BSL_SR' ;
+		DECLARE outMsg REFERENCE  TO OutputRoot.XMLNSC.MOBILY_BSL_SR ;
+		
+		SET outMsg.SR_BK_HEADER.FuncId 			= inMsg.SR_HEADER.FuncId ;  
+		SET outMsg.SR_BK_HEADER.SecurityKey 	= getProperty_ADJ('PR_SECURITY_KEY');
+		SET outMsg.SR_BK_HEADER.ServiceRequestId = enVariables.ParsedMsg.SRID ;
+		SET outMsg.SR_BK_HEADER.MsgVersion 		=  inMsg.SR_HEADER.MsgVersion ;
+		SET outMsg.SR_BK_HEADER.RequestorChannelId = inMsg.SR_HEADER.RequestorLanguage ;
+		SET outMsg.SR_BK_HEADER.SrDate 			= inMsg.SR_HEADER.SrDate ;
+		SET outMsg.SR_BK_HEADER.BackendChannel 	= 'PORTAL' ;
+		
+		SET outMsg.DeviceType 	= 'NUM' ;
+		SET outMsg.DeviceId		= inMsg.LineNumber ;
+		SET outMsg.Comments 	= '' ;
+		
+		
+		-- CALL CopyEntireMessage();
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+	
+	 
+  
+CREATE FUNCTION getProperty_ADJ (IN prop_name CHARACTER ) RETURNS CHARACTER
+BEGIN 
+	CALL LoadSharedVariables();
+	DECLARE prop_value CHARACTER;
+	CASE prop_name		
+	WHEN 'STAFF_REBATE_CODE' THEN
+		SET prop_value =STAFF_REBATE_CODE;	
+	WHEN 'PR_RESOURCE_ID' THEN 
+		SET prop_value =PR_RESOURCE_ID;
+	WHEN 'PR_SECURITY_KEY' THEN 
+	 	SET prop_value = PR_SECURITY_KEY;
+	END CASE;
+	
+	   -- will be part of the request message
+	 /* WHEN 'PR_MSG_VERSION' THEN 
+		SET prop_value = '0000';
+		*/ 	
+	
+ 
+	
+	
+	RETURN prop_value;
+END;
+	
+END MODULE;
+
+
+
+CREATE COMPUTE MODULE PoralValidationResponse
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyMessageHeaders();
+		--need to prepare something?  
+		IF EXISTS(InputExceptionList.[])THEN
+			SET Environment.Variables.RequestVars.ExceptionHandling='Y'; 
+			SET Environment.Variables.RequestVars.EventExceptionHandling = 'Y';
+			DECLARE TempExceptionList ROW InputExceptionList;
+			Create LASTCHILD of OutputRoot DOMAIN('XML') Name 'XML'; 
+			SET OutputRoot.XML.ExceptionList = InputExceptionList; 
+			DECLARE EXCEPTIONBLOB BLOB ASBITSTREAM(OutputRoot.XML.ExceptionList); 
+			DECLARE XmlString CHAR CAST(EXCEPTIONBLOB AS CHAR CCSID 1208); 
+			SET  Environment.Variables.EventMessage.ExceptionList =XmlString;
+			SET OutputRoot.XML=NULL;
+			DECLARE ErrorCode,ErrorDesc CHAR; 
+			DECLARE InputException REFERENCE TO InputExceptionList; 
+			
+			SET Environment.Variables.portalValidate.ErrorCode = ErrorCode;
+			SET Environment.Variables.portalValidate.ErrorDesc = ErrorDesc;		 
+		ELSE
+			SET Environment.Variables.portalValidateResp = SUBSTRING(CAST(ASBITSTREAM(InputRoot.XMLNSC) AS CHARACTER CCSID 1208)FROM 1 FOR 2499);
+				
+			
+			DECLARE portValResp REFERENCE TO InputRoot.XMLNSC.MOBILY_BSL_SR ;
+			
+			IF portValResp.DeviceType = 'NUM' AND portValResp.DeviceStatus = '2' AND LENGTH(portValResp.BillingNumber) > 1 THEN
+				RETURN TRUE ;
+			ELSE	
+				DELETE FROM Database.SR_PAYMENT_CHLTRANSID_UQ_TBL AS dlt WHERE dlt.CHANNEL_TRANS_ID = Environment.Variables.ParsedMsg.MOBILY_BSL_SR.ChannelTransId ;
+				SET Environment.Variables.ParsedMsg.ErrorCode= COALESCE(Environment.Variables.portalValidate.ErrorCode ,2030); 
+				SET Environment.Variables.ParsedMsg.ErrorDesc= 'Got Error from portal validation service' ;  		 
+				CALL saveRejected_portal(Environment.Variables) ; 
+			END IF ; 
+		
+		END IF;
+		
+		
+		-- CALL CopyEntireMessage();
+		RETURN FALSE ;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+	
+	
+ 
+CREATE PROCEDURE saveRejected_portal(IN env REFERENCE )
+BEGIN
+	SET env.ParsedMsg.Status=5;--STATUS_REJECTED
+	 
+	/*1- Add new SR*/
+	SET env.SR=PASSTHRU('INSERT INTO sr_servicerequest_tbl  ( sr_id, time_recieved, channel_id, line_number, status,  time_closed, time_reply, func_id, user_id, chargable,  chargeamount, error_code, last_update_time, overwrite_open_order, language, msg_version, SR_DATE, ACCOUNT_NUMBER)  VALUES( ? , ? , ? ,? , ? , ? , ? , ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)' 
+		 VALUES(env.ParsedMsg.SRID, CURRENT_TIMESTAMP,env.ChannelID.PROPERTYVALUE /* to be repalced witht the channel ID*/, 
+		 env.ParsedMsg.MOBILY_BSL_SR.LineNumber, 
+		env.ParsedMsg.Status, 
+		 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+		 105 /*To Be replaced with the function ID retrived from the hashmap with the value coming request*/, 
+		 env.ParsedMsg.MOBILY_BSL_SR.SR_HEADER.RequestorUserId, 
+		 env.ParsedMsg.MOBILY_BSL_SR.SR_HEADER.Chargeable,
+		 COALESCE(env.ParsedMsg.MOBILY_BSL_SR.SR_HEADER.ChargeAmount,env.ParsedMsg.MOBILY_BSL_SR.Amount), 
+		 env.ParsedMsg.ErrorCode, 
+		 CURRENT_TIMESTAMP, 
+		 env.ParsedMsg.MOBILY_BSL_SR.SR_HEADER.OverwriteOpenOrder,
+		 1, -- LANGUAGE_ENGLISH
+		 env.ParsedMsg.MOBILY_BSL_SR.SR_HEADER.MsgVersion, 
+		 env.ParsedMsg.MOBILY_BSL_SR.SR_HEADER.SrDate, 
+		 env.ParsedMsg.MOBILY_BSL_SR.AccountNumber) );
+		 
+	 DECLARE  DealStartDateT3 CHARACTER; 
+	 DECLARE  DealEndDateT3 CHARACTER; --CURRENT_DATE
+	 SET DealStartDateT3 = CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'yyyyMMddHHmmss');
+	 SET DealEndDateT3   = CAST((CURRENT_TIMESTAMP+CAST(30 AS INTERVAL DAY))AS CHARACTER FORMAT 'yyyyMMddHHmmss');
+		 
+	/* 2- Add new Payment request */
+	SET env.newDBPY=PASSTHRU('INSERT INTO SR_PAYMENT_TBL  (SR_ID, CHANNEL_TRANS_ID, LINE_NUMBER,  AMOUNT, STATUS, ERROR_CODE, COMMENTS, LAST_UPDATE_TIME, CURRENCY, CUSTOMER_TYPE, FUNC_ID, PAYMENT_REF_NUM_TO_REVERSE, REASON_CODE , ADJUSTMENT_TYPE,RELATED_LINE_NUMBER,ISREVENUE,IS_NEW_CONTROL,PACKAGE_ID,SKIP_BE,DEAL_START_DT,DEAL_END_DT, ACCOUNT_NUMBER, FINAL_REPLY_QUEUE_MANAGER, FINAL_REPLY_QUEUE,IS_REFILL, IS_CLOSED_ACCOUNT,PLANCATEGORY, DAID, DAAdjFlag, PAID_BY ,SYNC_RESPONSE,FEEFLAG,BIG_AMOUNT )  VALUES ( ? , ?, ? , ? , ?, ?, ?, ?, ? , ? , ?, ?, ?, ? ,?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)' 
+		 VALUES(env.ParsedMsg.SRID,
+		 env.ParsedMsg.MOBILY_BSL_SR.ChannelTransId,
+		 env.ParsedMsg.MOBILY_BSL_SR.LineNumber,
+		 COALESCE(env.ParsedMsg.MOBILY_BSL_SR.Amount,env.ParsedMsg.MOBILY_BSL_SR.SR_HEADER.ChargeAmount),
+		 env.ParsedMsg.Status,
+		 env.ParsedMsg.ErrorCode, 
+		 SUBSTRING(env.ParsedMsg.MOBILY_BSL_SR.Comments FROM 1 FOR 253),
+		 CURRENT_TIMESTAMP,
+		 env.ParsedMsg.MOBILY_BSL_SR.Currency,
+		 env.ParsedMsg.MOBILY_BSL_SR.CustomerType,
+		 105/*To be replaced with value retrived from the hash map with funqId in the incoming request*/,-- Reverse Function ID
+		 env.ParsedMsg.MOBILY_BSL_SR.PaymentReferenceNumber,
+		 env.ParsedMsg.PaymentReasonCode,
+		 env.ParsedMsg.MOBILY_BSL_SR.AdjustmentType,
+		 env.ParsedMsg.MOBILY_BSL_SR.RelatedMsisdn,
+		 env.ParsedMsg.MOBILY_BSL_SR.ISREVENUE,
+		 env.ParsedMsg.MOBILY_BSL_SR.IsNewControl,
+		 env.ParsedMsg.MOBILY_BSL_SR.PackageId,
+		 env.ParsedMsg.MOBILY_BSL_SR.NewControlInfo.SkipBE,
+		 COALESCE(env.ParsedMsg.MOBILY_BSL_SR.NewControlInfo.DealStartT,DealStartDateT3),--CAST(CURRENT_DATE AS DATE FORMAT 'yyyyMMddHHmmss')),-- to be replaced with actual date ***
+		 COALESCE(env.ParsedMsg.MOBILY_BSL_SR.NewControlInfo.DealEndT,DealEndDateT3),--CAST((CURRENT_DATE+CAST(30 AS INTERVAL DAY))AS DATE FORMAT 'yyyyMMddHHmmss')),-- to be replaced with actual date ***
+		 env.ParsedMsg.MOBILY_BSL_SR.AccountNumber,
+		 env.ParsedMsg.MOBILY_BSL_SR.FINAL_REPLY_QUEUE_MANAGER,
+		 env.ParsedMsg.MOBILY_BSL_SR.Final_Reply_Queue,
+		 env.ParsedMsg.MOBILY_BSL_SR.ExtendValidity,
+		 env.ParsedMsg.MOBILY_BSL_SR.IsClosedAccount,
+		 env.ParsedMsg.MOBILY_BSL_SR.PlanCategory,
+		 env.ParsedMsg.MOBILY_BSL_SR.DAID,
+		 env.ParsedMsg.MOBILY_BSL_SR.DAAdjFlag,
+		 env.ParsedMsg.MOBILY_BSL_SR.NewControlInfo.PAID_BY,
+		 env.ParsedMsg.MOBILY_BSL_SR.SR_HEADER.SyncResponseRequired,
+		 env.ParsedMsg.MOBILY_BSL_SR.FeeFlag,
+		 env.ParsedMsg.MOBILY_BSL_SR.BigAmount		 
+		 		 ));
+	/* 3- Add new Tracking point */
+	 SET env.newDBPY=PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL  (ID, SR_ID, CHANNEL_TRANS_ID,  LINE_NUMBER,  TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,BE_REFERENCE_NUMBER,  NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID ) VALUES ( SR_PAYMENT_AUDIT_SEQ.NEXTVAL, ? , ?, ? , ? , ?, ?,  ?, ? , ? , ? , ? ,? )' VALUES(
+		 env.ParsedMsg.SRID,
+		 env.ParsedMsg.MOBILY_BSL_SR.ChannelTransId,
+		 env.ParsedMsg.MOBILY_BSL_SR.LineNumber,
+		 CURRENT_TIMESTAMP,
+		 100, -- point code
+		 1,-- point status
+		 null, null, 
+		 COALESCE(env.portalValidateResp,env.Msg),
+		 null,null,
+		 null -- message ID		 
+		 ));  
+		 
+	/* 4- save SCUS, RCUS */
+	IF (env.ParsedMsg.ErrorCode=1012 /* CUSTOMER_TYPE_SEND_ERROR */) THEN
+		
+		 SET env.newDBPY=PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL  (ID, SR_ID, CHANNEL_TRANS_ID,  LINE_NUMBER,  TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,BE_REFERENCE_NUMBER,  NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID ) VALUES ( SR_PAYMENT_AUDIT_SEQ.NEXTVAL, ? , ?, ? , ? , ?, ?,  ?, ? , ? , ? , ? ,? )' VALUES(
+		 env.ParsedMsg.SRID,
+		 env.ParsedMsg.MOBILY_BSL_SR.ChannelTransId,
+		 env.ParsedMsg.MOBILY_BSL_SR.LineNumber,
+		 CURRENT_TIMESTAMP,
+		 100, -- point code
+		 2,-- point status -- TRACKING_POINT_FAILED_STATUS
+		 null, null,
+		 env.Msg,
+		 null,null,
+		 null -- message ID		 
+		 ));
+		
+	ELSEIF (env.ParsedMsg.ErrorCode=1008 /* CUSTOMER_TYPE_INQ_ERROR */) THEN
+		
+		 SET env.newDBPY=PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL  (ID, SR_ID, CHANNEL_TRANS_ID,  LINE_NUMBER,  TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,BE_REFERENCE_NUMBER,  NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID ) VALUES ( SR_PAYMENT_AUDIT_SEQ.NEXTVAL, ? , ?, ? , ? , ?, ?,  ?, ? , ? , ? , ? ,? )' VALUES(
+		 env.ParsedMsg.SRID,
+		 env.ParsedMsg.MOBILY_BSL_SR.ChannelTransId,
+		 env.ParsedMsg.MOBILY_BSL_SR.LineNumber,
+		 CURRENT_TIMESTAMP,
+		 100, -- point code
+		 1,-- point status -- TRACKING_POINT_SUCCESS_STATUS
+		 null, null,
+		 env.Msg,
+		 null,null,
+		 null -- message ID		 
+		 ));
+		 
+		 
+		 SET env.newRCUS=PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL  (ID, SR_ID, CHANNEL_TRANS_ID,  LINE_NUMBER,  TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,BE_REFERENCE_NUMBER,  NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID ) VALUES ( SR_PAYMENT_AUDIT_SEQ.NEXTVAL, ? , ?, ? , ? , ?, ?,  ?, ? , ? , ? , ? ,? )' VALUES(
+		 env.ParsedMsg.SRID,
+		 env.ParsedMsg.MOBILY_BSL_SR.ChannelTransId,
+		 env.ParsedMsg.MOBILY_BSL_SR.LineNumber,
+		 CURRENT_TIMESTAMP,
+		 102, -- point code -- TRACKING_RCUS
+		 2,-- point status -- TRACKING_POINT_FAILED_STATUS
+		 null, null,
+		 env.Msg,
+		 null,null,
+		 null -- message ID		 
+		 ));
+		 
+		 
+		 
+		 
+		 
+		
+	ELSEIF(env.ParsedMsg.ErrorCode IN (2016, 2019, 2017, 2018, 2020, 2021, 2022, 2013, 2025) /* UKNOWN_PAYMENT_STATUS_IN_EAI, UKNOWN_PAYMENT_TYPE_IN_EAI, PAYMENT_ALREADY_REVERSED, PAYMENT_TO_BE_REVERSED_NOT_SUCCESSUL_IN_EAI, PAYMENT_TYPE_CANNOT_BE_REVERSED, EAI_PAYMENT_TYPE_DOESNOT_MATCH_CUSTOMER_TYPE, INVALID_EAI_AMOUNT, AMOUNT_SHOULD_NOT_BE_NEGATIVE, CANNOT_FIND_BE_REFERENCE_NUMBER_IN_EAI */)  THEN
+		 SET env.newSCUS=PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL  (ID, SR_ID, CHANNEL_TRANS_ID,  LINE_NUMBER,  TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,BE_REFERENCE_NUMBER,  NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID ) VALUES ( SR_PAYMENT_AUDIT_SEQ.NEXTVAL, ? , ?, ? , ? , ?, ?,  ?, ? , ? , ? , ? ,? )' VALUES(
+		 env.ParsedMsg.SRID,
+		 env.ParsedMsg.MOBILY_BSL_SR.ChannelTransId,
+		 env.ParsedMsg.MOBILY_BSL_SR.LineNumber,
+		 CURRENT_TIMESTAMP,
+		 101, -- point code
+		 1,-- point status
+		 null, null,
+		 env.Msg,
+		 null,null,
+		 null -- message ID		 
+		 ));
+		 
+		 SET env.newRCUS=PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL  (ID, SR_ID, CHANNEL_TRANS_ID,  LINE_NUMBER,  TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,BE_REFERENCE_NUMBER,  NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID ) VALUES ( SR_PAYMENT_AUDIT_SEQ.NEXTVAL, ? , ?, ? , ? , ?, ?,  ?, ? , ? , ? , ? ,? )' VALUES(
+		 env.ParsedMsg.SRID,
+		 env.ParsedMsg.MOBILY_BSL_SR.ChannelTransId,
+		 env.ParsedMsg.MOBILY_BSL_SR.LineNumber,
+		 CURRENT_TIMESTAMP,
+		 102, -- point code
+		 1,-- point status
+		 null, null,
+		 env.Msg,
+		 null,null,
+		 null -- message ID		 
+		 ));
+		
+		ELSEIF (env.ParsedMsg.ErrorCode=2030 /*PORTAL Validation ERROR */) THEN
+		
+		 SET env.newDBPY=PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL  (ID, SR_ID, CHANNEL_TRANS_ID,  LINE_NUMBER,  TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,BE_REFERENCE_NUMBER,  NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID ) VALUES ( SR_PAYMENT_AUDIT_SEQ.NEXTVAL, ? , ?, ? , ? , ?, ?,  ?, ? , ? , ? , ? ,? )' VALUES(
+		 env.ParsedMsg.SRID,
+		 env.ParsedMsg.MOBILY_BSL_SR.ChannelTransId,
+		 env.ParsedMsg.MOBILY_BSL_SR.LineNumber,
+		 CURRENT_TIMESTAMP,
+		 2030, -- point code
+		 2,-- point status -- TRACKING_POINT_FAILED_STATUS
+		 null, null,
+		 env.Msg,
+		 null,null,
+		 null -- message ID		 
+		 ));
+		
+		
+	END IF;
+END;
+ 
+	
+	
+END MODULE;

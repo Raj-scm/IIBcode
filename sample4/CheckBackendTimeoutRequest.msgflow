@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:ecore="ecore.xmi" xmlns:eflow="eflow.xmi" xmlns:utility="eflow_utility.xmi" xmlns:ComIbmMQInput.msgnode="ComIbmMQInput.msgnode" xmlns:ComIbmMQOutput.msgnode="ComIbmMQOutput.msgnode" xmlns:ComIbmCompute.msgnode="ComIbmCompute.msgnode" xmlns:FailureProcessingFlow.msgflow="FailureProcessingFlow.msgflow" xmi:id="EPackage_1" nsURI="CheckBackendTimeoutRequest.msgflow" nsName="CheckBackendTimeoutRequest.msgflow">
+  <eMetaObjects xmi:type="eflow:FCMComposite" xmi:id="FCMComposite_1">
+    <translation xmi:type="utility:TranslatableString" xmi:id="TranslatableString_1" key="CheckBackendTimeoutRequest" bundleName="CheckBackendTimeoutRequest" pluginId="AlertSystemFlowP"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" xmi:id="GIFFileGraphic_1" resourceName="platform:/plugin/AlertSystemFlowP/icons/full/obj16/CheckBackendTimeoutRequest.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" xmi:id="GIFFileGraphic_2" resourceName="platform:/plugin/AlertSystemFlowP/icons/full/obj30/CheckBackendTimeoutRequest.gif"/>
+    <eSuper xmi:type="ecore:EClass" href="eflow.xmi#FCMBlock"/>
+    <composition xmi:id="Composition_1">
+      <nodes xmi:type="ComIbmMQInput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_1" location="46,102" queueName="CHECK.BACKEND.TIMEOUT.REQUEST" messageDomainProperty="XML">
+        <translation xmi:type="utility:ConstantString" xmi:id="ConstantString_1" string="CHECK.BACKEND.TIMEOUT.REQUEST"/>
+      </nodes>
+      <nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" location="262,254" queueName="ALERT.SYSTEM.REQUEST">
+        <translation xmi:type="utility:ConstantString" xmi:id="ConstantString_2" string="ALERT.SYSTEM.REQUEST"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" location="163,175" dataSource="EAIDBOR" computeExpression="esql://routine/#CheckBackendTimeoutRequest_GetTimedoutPaymentsCompute.Main">
+        <translation xmi:type="utility:ConstantString" xmi:id="ConstantString_3">
+          <string>Get Timedout Payments</string>
+        </translation>
+      </nodes>
+      <nodes xmi:type="FailureProcessingFlow.msgflow:FCMComposite_1" xmi:id="FCMComposite_1_4" location="347,94" filterExpression="FailureProcessingFlow_filterExpressionC">
+        <translation xmi:type="utility:ConstantString" xmi:id="ConstantString_4" string="FailureProcessingFlow"/>
+      </nodes>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.Failure%20Input" targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_1"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_1"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.Failure%20Input" targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_3"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in" targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_3"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.Failure%20Input" targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_2"/>
+    </composition>
+    <propertyOrganizer xmi:id="PropertyOrganizer_1"/>
+  </eMetaObjects>
+</ecore:EPackage>

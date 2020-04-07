@@ -1,0 +1,102 @@
+
+
+CREATE COMPUTE MODULE ConstructReplyMsg_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		
+		SET OutputRoot.Properties=InputRoot.Properties;
+		SET OutputRoot.MQMD= InputRoot.MQMD;
+--		CREATE FIRSTCHILD OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY Domain('XMLNSC');
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.SRMessageHandler.FuncId= InputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.FuncId;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.SRMessageHandler.MsgVersion=InputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.MsgVersion;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.SRMessageHandler.RequestorChannelId=InputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.RequestorChannelId;
+		DECLARE tempDate DATE CURRENT_DATE;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.SRMessageHandler.SrDate=CAST(tempDate AS DATE FORMAT 'yyyyMMddHHmmss');
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.SRMessageHandler.SrRcvDate=CAST(InputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.SrDate AS DATE FORMAT 'yyyyMMddHHmmss');
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.SRMessageHandler.SrStatus=Environment.Variables.Status;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.ChannelTransId=InputRoot.XMLNSC.MOBILY_BSL_SR.ChannelTransId;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.ServiceRequestId=Environment.Variables.SRID;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.ErrorMsg='';
+		
+		
+	/*	
+		IF (Environment.Variables.ParsedMsg.Status=2 /*STATUS_ACCEPTED*/) THEN
+			/*70 EAI_REVERSED_STATUS*/ 
+			DECLARE refNum CHAR Environment.Variables.ParsedMsg.MOBILY_BSL_SR.PaymentReferenceNumber;
+			 IF (LENGTH(refNum)<32) THEN
+		 		SET refNum=SUBSTRING((refNum||'                                ') FROM 1 FOR 32);
+		 	END IF;
+		  SET InputLocalEnvironment.UpdateEAI[]=PASSTHRU('update  EE_AUDIT set status = 70 where referencenumber = ? '  TO Database.DBORDSNNAME VALUES (refNum));
+		  SET Environment.Variables.ParsedMsg.Status= 6; --STATUS_SUCCESSFUL
+		END IF;
+		*/
+		
+		
+		
+		
+		IF (Environment.Variables.ParsedMsg.Status=5 /*STATUS_REJECTED*/ OR Environment.Variables.ParsedMsg.Status= 3 /*STATUS_FAILED*/) THEN
+			SET OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.ErrorCode=Environment.Variables.ParsedMsg.ErrorCode;
+		ELSE
+			
+			SET OutputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.ErrorCode='0000';
+		END IF;
+		
+		 
+		SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueManagerName = Environment.Variables.ParsedMsg.MOBILY_BSL_SR.FINAL_REPLY_QUEUE_MANAGER;
+		-- JK19-4555 		
+		IF (Environment.Variables.ParsedMsg.MOBILY_BSL_SR.SR_HEADER.RequestorChannelId = 'SIEBEL') THEN
+			 SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueName = Environment.Variables.SyncReplyQueue;
+		ELSE 
+			SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueName = Environment.Variables.ParsedMsg.MOBILY_BSL_SR.Final_Reply_Queue;	
+		 END IF;
+		 
+		 SET OutputRoot.MQMD.CorrelId=Environment.Variables.ParsedMsg.MOBILY_BSL_SR.ChannelMessageId;
+		
+		SET Environment.Variables.SFRTMsg=SUBSTRING(CAST(ASBITSTREAM(OutputRoot.XMLNSC) AS CHARACTER CCSID 1208)FROM 1 FOR 2499);
+		
+		PROPAGATE TO TERMINAL 'out' DELETE NONE;
+		
+		
+		CALL updateDBSFRT(Environment.Variables);
+		
+		RETURN FALSE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+CREATE PROCEDURE updateDBSFRT(IN env REFERENCE)
+BEGIN
+	
+	/** 1- Update Payment Status **/
+	SET env.updatePymnt= PASSTHRU('UPDATE SR_PAYMENT_TBL  SET LAST_UPDATE_TIME = ? , STATUS = ?, ERROR_CODE = ?   WHERE SR_ID = ? and status!=6' VALUES(CURRENT_TIMESTAMP, env.ParsedMsg.Status, env.ParsedMsg.ErrorCode, env.ParsedMsg.SRID));
+	
+	/** 2- Add SFRT Tracking point **/
+	SET env.newDBPY=PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL  (ID, SR_ID, CHANNEL_TRANS_ID,  LINE_NUMBER,  TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,BE_REFERENCE_NUMBER,  NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID ) VALUES ( SR_PAYMENT_AUDIT_SEQ.NEXTVAL, ? , ?, ? , ? , ?, ?,  ?, ? , ? , ? , ? ,? )' VALUES(
+	env.ParsedMsg.SRID,
+	env.ParsedMsg.MOBILY_BSL_SR.ChannelTransId,
+	env.ParsedMsg.MOBILY_BSL_SR.LineNumber,
+	CURRENT_TIMESTAMP,
+	107, -- point code -- TRACKING_SFRT
+	1, -- point status -- TRACKING_POINT_SUCCESS_STATUS
+	null, null,
+	COALESCE(env.SFRTMsg,SUBSTRING(CAST(ASBITSTREAM(env.OrginalMsg) AS CHARACTER CCSID 1208)FROM 1 FOR 2499)),
+		null,null,
+		null -- message ID
+		));
+	
+END;

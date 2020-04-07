@@ -1,0 +1,82 @@
+
+
+CREATE COMPUTE MODULE sendToOnlineRechargeRequest_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		 CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		DECLARE enVariables REFERENCE TO Environment.Variables ;
+		
+		CREATE LASTCHILD OF OutputRoot.XMLNSC NAME 'PaymentAdjustmentRq' ;
+		DECLARE rf_out_PayAdjReq REFERENCE TO OutputRoot.XMLNSC.PaymentAdjustmentRq ;
+		
+		CREATE LASTCHILD OF rf_out_PayAdjReq NAME 'MsgRqHdr' ;
+		DECLARE rfout_msgHeader REFERENCE TO rf_out_PayAdjReq.MsgRqHdr ;
+		
+		
+		
+		SET rfout_msgHeader.RqUID 		= enVariables.srId ;
+		SET rfout_msgHeader.SCId 		= 'EAI' ;
+		SET rfout_msgHeader.FuncId 		= '40650000' ;
+		SET rfout_msgHeader.RqMode 		= enVariables.retryCnt  ; --retry counter still need clarity
+		SET rfout_msgHeader.CallerService = 'ADJUSTMENT_PAYMENT' ;
+		
+		
+		CREATE LASTCHILD OF rf_out_PayAdjReq NAME 'AdjustmentRequest' ;
+		DECLARE AdjReq REFERENCE TO rf_out_PayAdjReq.AdjustmentRequest ;
+		
+		SET AdjReq.RequestId 			= '1';
+		IF enVariables.inputMsg.MOBILY_BSL_SR.SR_HEADER.FuncId = 'ADJUSTMENT_PAYMENT' THEN 
+			IF enVariables.adjustmentType = '1' THEN
+				SET AdjReq.RequestType 			= '2' ;
+			ELSEIF enVariables.adjustmentType = '2' THEN
+				SET AdjReq.RequestType 			= '1' ;	
+			END IF;	
+		ELSE 	
+		SET AdjReq.RequestType 			= enVariables.adjustmentType ;
+		END IF;
+		
+		SET AdjReq.AccountId.MSISDN 	= enVariables.LineNumber ;
+		SET AdjReq.AdjustmentCode 		= enVariables.reasonCode ;
+		
+		IF enVariables.getPaymentInfo.SR_PAYMENT_TBL.DAADJFLAG = '0' THEN
+			SET AdjReq.MainAccountAmount 	= COALESCE(enVariables.getPaymentInfo.SR_PAYMENT_TBL.AMOUNT,enVariables.amount) ;
+		ELSEIF enVariables.getPaymentInfo.SR_PAYMENT_TBL.DAADJFLAG = '1' THEN 
+			SET AdjReq.DedicatedAccountId 	= enVariables.getPaymentInfo.SR_PAYMENT_TBL.DAID;--enVariables.daid ;
+			SET AdjReq.DedicatedAccountAmount = COALESCE(enVariables.getPaymentInfo.SR_PAYMENT_TBL.AMOUNT,enVariables.amount) ;
+		ELSE 
+			SET AdjReq.MainAccountAmount 	= COALESCE(enVariables.getPaymentInfo.SR_PAYMENT_TBL.AMOUNT,enVariables.amount);
+		END IF;	
+--		SET AdjReq.MainAccountAmount 	= enVariables.amount ;
+
+--		SET AdjReq.DedicatedAccountAmount = enVariables.amount ;
+		IF enVariables.inputMsg.MOBILY_BSL_SR.ExtendValidity = 'Y' THEN
+		SET AdjReq.RefillProfileId 		= enVariables.profileId ;
+		END IF;
+		IF enVariables.gracePrdTrg = 'Y' THEN
+			SET AdjReq.GracePeriodTrigger 	= 'true';
+		ELSE 
+			SET AdjReq.GracePeriodTrigger 	= 'false';
+		END IF;	
+		IF enVariables.inputMsg.MOBILY_BSL_SR.IsNewControl = 'Y' THEN
+		SET AdjReq.NewControlFlag		= 'Y';
+		END IF;
+		SET enVariables.outMsg = OutputRoot.XMLNSC ;
+		 
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;

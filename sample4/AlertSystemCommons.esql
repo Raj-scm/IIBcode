@@ -1,0 +1,59 @@
+CREATE PROCEDURE Check_Frequency(IN ErrorCount Integer, IN Frequency Character, INOUT Flag CHAR) 
+	BEGIN 
+		
+		Declare FrequenctText Character;
+		Declare Freq_Count Character;
+		Declare Pos Integer;
+		set FrequenctText=Frequency;
+		set Flag ='N'; 
+		If Trim (FrequenctText)='' Then 
+			Return; 
+		End IF;
+		
+		WHILE Length(FrequenctText)>0 DO
+			SET Pos = Position(',' IN FrequenctText) ;
+			If Pos >0 then
+				set Freq_Count= substring(FrequenctText from 1 for Pos-1);
+				set FrequenctText=substring(FrequenctText from Pos+1);
+			Else
+				set Freq_Count=FrequenctText;
+				set FrequenctText='';
+			End If;
+			If Freq_Count='0' Then -- notification is required for every error
+				Set Flag='Y';
+				Return;
+			End If;
+			If substring(Freq_Count from length(Freq_Count) for 1)='+' Then
+				If MOD(ErrorCount, cast(substring(Freq_Count from 1 for length(Freq_Count)-1) as integer))=0 Then
+					set Flag='Y';
+					set FrequenctText='';
+				End If;
+			Else
+				If ErrorCount =cast (Freq_Count as integer) Then
+					set Flag='Y';
+					set FrequenctText='';
+				End If;
+			End If;
+		END WHILE;
+	END;
+
+CREATE FUNCTION IsTimeoutError(ErrorCode CHAR) RETURNS BOOLEAN
+BEGIN
+	RETURN (TRIM(ErrorCode)='9806' OR TRIM(ErrorCode)='9807' OR TRIM(ErrorCode)='9808' OR TRIM(ErrorCode)='9812');
+END;
+
+CREATE FUNCTION GetTimeoutErrorCode(Sys CHAR) RETURNS CHAR
+BEGIN
+	DECLARE System CHAR UPPER(Sys);
+	
+	CASE System
+	WHEN 'PORTAL' THEN
+		RETURN '9806';
+	WHEN 'EMA' THEN
+		RETURN '9807';
+	WHEN 'SADAD' THEN
+		RETURN '9808';	
+	WHEN 'FRNT' THEN
+		RETURN '9812';
+	END CASE;
+END;

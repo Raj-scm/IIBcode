@@ -1,0 +1,372 @@
+
+
+
+
+
+
+CREATE COMPUTE MODULE AdjustmentsCallerCMP_BuildRequest
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		
+		/*<MOBILY_BSL_SR>
+ <SR_HEADER>
+  <FuncId>ADJUSTMENT_PAYMENT</FuncId> 
+  <MsgVersion>0000</MsgVersion> 
+  <RequestorChannelId>MBI</RequestorChannelId> 
+  <SrDate>20100609141432</SrDate> 
+  <RequestorUserId>PF101967</RequestorUserId> 
+  <RequestorLanguage>E</RequestorLanguage> 
+  <OverwriteOpenOrder>N</OverwriteOpenOrder> 
+  <Chargeable>N</Chargeable> 
+  <ChargeAmount>0.0</ChargeAmount> 
+  </SR_HEADER>
+  <ChannelTransId>MBI-103229273</ChannelTransId> 
+  <LineNumber>966540512419</LineNumber> 
+  <Amount>1</Amount> 
+  <Currency /> 
+  <AdjustmentType>Credit</AdjustmentType> 
+  <AdjustmentCode>210</AdjustmentCode> 
+  <ISREVENUE>N</ISREVENUE> 
+  <Comments>Testing by IT Team [Nabieh Salim PF101967]</Comments> 
+  <CustomerType /> 
+  </MOBILY_BSL_SR>
+
+		
+		*/
+		CALL CopyMessageHeaders();		
+		
+		SET OutputRoot.Properties.ReplyProtocol = 'MQ';		
+		SET OutputRoot.Properties.MessageDomain = 'XMLNSC';	
+			
+		SET OutputRoot.MQMD.StrucId 	   = MQMD_STRUC_ID;
+		SET OutputRoot.MQMD.Version 	   = MQMD_CURRENT_VERSION;
+		SET OutputRoot.MQMD.Encoding 	   = 546;
+		SET OutputRoot.MQMD.CodedCharSetId = 1208;
+		SET OutputRoot.MQMD.Format   	   = 'MQSTR';		
+		SET OutputRoot.MQMD.MsgType 	   = MQMT_REQUEST;
+		SET OutputRoot.MQMD.MsgId  		   =  InputRoot.MQMD.MsgId;
+		SET OutputRoot.Properties.ReplyIdentifier = OutputRoot.MQMD.MsgId;
+		SET OutputRoot.MQMD.CorrelId 	   = OutputRoot.MQMD.MsgId;
+		SET OutputRoot.MQMD.Report		   = MQRO_NONE;
+		SET OutputRoot.MQMD.ReplyToQMgr    = '';
+		SET OutputRoot.MQMD.ReplyToQ 	   = Environment.Variables.AdjustmentsCallerCMP.ReplyToQ;
+
+		SET OutputRoot.MQMD.PutDate 	   = CURRENT_DATE;		
+		SET OutputRoot.MQMD.PutTime 	   = CURRENT_GMTTIME;
+		
+		SET OutputRoot.MQMD.Expiry= CURRENT_GMTTIMESTAMP + INTERVAL '20' SECOND;
+
+		
+		SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueName = Environment.Variables.AdjustmentsCallerCMP.RequestQueue;
+		SET OutputLocalEnvironment.MQ.GET.QueueName = Environment.Variables.AdjustmentsCallerCMP.ReplyToQ; 
+
+				
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.FuncId = 'ADJUSTMENT_PAYMENT';
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.MsgVersion = '0000';
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.RequestorChannelId = Environment.Variables.AdjustmentsCallerCMPRq.RequestorChannelId;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.SrDate = CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'yyyyMMddHHmmss');
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.RequestorUserId = Environment.Variables.AdjustmentsCallerCMPRq.RequestorUserId;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.RequestorLanguage = 'E';
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.OverwriteOpenOrder= 'N';
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.Chargeable		= 'N';
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.ChargeAmount		='0.0';
+		
+		
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.ChannelTransId  = Environment.Variables.AdjustmentsCallerCMPRq.ChannelTransId;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.LineNumber  	= Environment.Variables.AdjustmentsCallerCMPRq.MSISDN;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.Amount 			= Environment.Variables.AdjustmentsCallerCMPRq.Amount;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.Currency 		= '';
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.AdjustmentType	= Environment.Variables.AdjustmentsCallerCMPRq."Transaction Type";
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.AdjustmentCode	= Environment.Variables.AdjustmentsCallerCMPRq.Reason;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.ISREVENUE		= 'N';
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.Comments 		= Environment.Variables.AdjustmentsCallerCMPRq.Comment;
+		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.CustomerType 	= '';
+				
+		
+
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE COMPUTE MODULE AdjustmentsCallerCMP_AuditRequest
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		IF UPPER(COALESCE(Environment.Variables.AdjustmentsCallerCMP.AuditFlag,'')) <> 'TRUE' THEN
+			RETURN FALSE;
+		END IF;
+
+		CALL CopyEntireMessage();	
+
+		SET Environment.Variables.AuditRequest.SRID = Environment.Variables.AdjustmentsCallerCMP.SRID;
+		SET Environment.Variables.AuditRequest.MessageType	= 'AdjustmentsCallerCMP_Request';
+        SET Environment.Variables.AuditRequest.FuncId = Environment.Variables.AdjustmentsCallerCMP.FuncID;
+        SET Environment.Variables.AuditRequest.TrackPointId = '10244';
+        SET Environment.Variables.AuditRequest.MSISDN = Environment.Variables.AdjustmentsCallerCMPRq.MSISDN;
+        SET Environment.Variables.AuditRequest.Status = '1';
+        SET Environment.Variables.AuditRequest.TableName = Environment.Variables.AdjustmentsCallerCMP.TableName;
+
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE COMPUTE MODULE AdjustmentsCallerCMP_Timeout
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		CALL CopyEntireMessage();
+		
+		SET Environment.Variables.AdjustmentsCallerCMPRs.ReturnCode = '8477'; --Adjustment service Response Timeout
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE COMPUTE MODULE AdjustmentsCallerCMP_Reply_Q_Not_Available
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN		
+		CALL CopyEntireMessage();
+		SET Environment.Variables.AdjustmentsCallerCMPRs.ReturnCode = '8476'; --Adjustment service reply Queue is not available 
+	
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE COMPUTE MODULE AdjustmentsCallerCMP_MCR_RqQ_Not_Available
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyEntireMessage();
+		SET Environment.Variables.AdjustmentsCallerCMPRs.ReturnCode = '8475'; --Adjustment service Request Queue is not available 
+
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE COMPUTE MODULE AdjustmentsCallerCMP_AuditReply
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		IF UPPER(COALESCE(Environment.Variables.AdjustmentsCallerCMP.AuditFlag,'')) <> 'TRUE' THEN
+			RETURN FALSE;
+		END IF;
+
+		CALL CopyEntireMessage();
+
+		SET Environment.Variables.AuditRequest.MessageType	= 'AdjustmentsCallerCMP_Reply';
+       	SET Environment.Variables.AuditRequest.Status = Environment.Variables.AdjustmentsCallerCMPRs.ErrorCode;
+   		SET Environment.Variables.AuditRequest.TrackPointId = '10245';
+
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE COMPUTE MODULE AdjustmentsCallerCMP_AuditException
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyMessageHeaders(); 
+		
+		SET Environment.Variables.ErrorCode = Environment.Variables.AdjustmentsCallerCMPRs.ReturnCode;
+		
+		DECLARE ErrorInfo ROW; 
+		CALL PARSEExceptionList(InputExceptionList,ErrorInfo);
+		
+
+		DECLARE CompleteErrorMsg CHAR;
+		SET CompleteErrorMsg=CAST(CURRENT_TIMESTAMP AS CHAR)||';   Flow Name  :'||ErrorInfo.FLOW_NAME||';  Node Name  :'||ErrorInfo.NODE_NAME||';  Errror Text  :'|| ErrorInfo.ERROR_DETAILS;
+		SET Environment.Variables.ErrorInfo = ErrorInfo;
+		SET OutputRoot.XMLNSC = NULL;
+		SET OutputRoot.BLOB.BLOB = CAST (Environment.Variables.ErrorInfo.CompleteErrorMsg AS BLOB CCSID 1208 ENCODING 546 );			
+		SET OutputExceptionList = NULL;
+		
+   		SET Environment.Variables.AuditRequest.MessageType	= 'MQ_EXCEPTION';
+       	SET Environment.Variables.AuditRequest.Status = Environment.Variables.AdjustmentsCallerCMPRs.ReturnCode;
+   		SET Environment.Variables.AuditRequest.TrackPointId = '10246';
+		 
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE COMPUTE MODULE AdjustmentsCallerCMP_Preprocessing
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE FILTER MODULE AdjustmentsCallerCMP_isSuccess
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		RETURN Environment.Variables.AdjustmentsCallerCMPRs.ReturnCode in ( '0','0000' );
+	END;
+
+END MODULE;
+
+
+CREATE COMPUTE MODULE AdjustmentsCallerCMP_BuildResponse
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		CALL CopyEntireMessage();
+		/*
+<MOBILY_BSL_SR_REPLY>
+<SR_HEADER_REPLY>
+  <FuncId>ADJUSTMENT_PAYMENT</FuncId> 
+  <MsgVersion>0000</MsgVersion> 
+  <RequestorChannelId>MBI</RequestorChannelId> 
+  <SrDate>20100609141432</SrDate> 
+  <SrRcvDate>20100609141611</SrRcvDate> 
+  <SrStatus>5</SrStatus> 
+  </SR_HEADER_REPLY>
+  <ChannelTransId>MBI-103229273</ChannelTransId> 
+  <ServiceRequestId>SR_1800143941</ServiceRequestId> 
+  <ErrorMsg>Invalid Request Exception ID : 2026</ErrorMsg> 
+  <ErrorCode>2026</ErrorCode> 
+  </MOBILY_BSL_SR_REPLY>
+*/
+
+	
+		SET Environment.Variables.AdjustmentsCallerCMPRs.ErrorCode = COALESCE(InputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.ErrorCode,'') ;
+		SET Environment.Variables.AdjustmentsCallerCMPRs.ErrorMsg  = COALESCE(InputRoot.XMLNSC.MOBILY_BSL_SR_REPLY.ErrorMsg,'') ;
+		
+		SET Environment.Variables.AdjustmentsCallerCMPRs.ReturnCode =  Environment.Variables.AdjustmentsCallerCMPRs.ErrorCode;
+		SET Environment.Variables.ErrorCode = Environment.Variables.AdjustmentsCallerCMPRs.ErrorCode;
+		SET Environment.Variables.ErrorMessage  = Environment.Variables.AdjustmentsCallerCMPRs.ErrorMsg;
+
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+

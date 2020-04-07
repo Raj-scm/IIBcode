@@ -1,0 +1,556 @@
+CREATE COMPUTE MODULE AlertSystemRequest_LogPaymentErrors
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyEntireMessage();
+			
+		DECLARE SPACES32 CHARACTER '                                ';
+		DECLARE ErrorCount Integer; 
+		
+		--get the info of the transaction from the EE_AUDIT table
+		SET Environment.Variables.Save.EEAudit[]	=	PASSTHRU(	'SELECT  FIELD3 "MSISDN", '				||
+											 								'REQUESTORCHANNELID "CHANNEL", '||
+											 								'FIELD4 "AMOUNT", '		 		||
+											 								'FIELD9 "PayType" '		 		||
+											 						'FROM EE_AUDIT where REFERENCENUMBER=?'
+											 						, SUBSTRING( (InputRoot.XML.Alert.ReferenceNumber || SPACES32) FROM 1 FOR 32  ));
+		
+		-- Log Payment failures in  PAYMENT_FAILURE table (see if entry exists for same reference number/error code pair (possible for specific errors)
+		-- ,if so update it, else create new entry)
+		SET Environment.Variables.Save.Payment_Failure[]	=	PASSTHRU(	'SELECT  COUNTER "COUNTER"	'	||
+											 								'FROM PAYMENT_FAILURE WHERE REFERENCENUMBER =? '||
+											 								'AND ERRORCODE=?', TRIM(InputRoot.XML.Alert.ReferenceNumber),TRIM(InputRoot.XML.Alert.ErrorCode));
+											 								
+		--insert the record into the payment_failure table. Here counter (used for specific errors) is incremented if already a value exists 
+		--else the counter is initialized to 1.
+		--IF CARDINALITY (Environment.Variables.Save.Payment_Failure[]) > 0 THEN
+		IF(Environment.Variables.Save.Payment_Failure[1].COUNTER IS NOT NULL) THEN 
+			PASSTHRU('UPDATE PAYMENT_FAILURE 	'||
+					 'SET TIMESTAMP=?,			'||
+					 'COUNTER=COUNTER+1			'||
+					 'WHERE REFERENCENUMBER=?	'||
+					 'AND ERRORCODE=?			',
+					 substring(cast(CURRENT_TIMESTAMP as CHARACTER) from 12 for 23),
+					 TRIM(InputRoot.XML.Alert.ReferenceNumber),
+					 TRIM(InputRoot.XML.Alert.ErrorCode));
+					 set ErrorCount=cast(Environment.Variables.Save.Payment_Failure[1].COUNTER as integer)+1;
+		--else the counter is initialized to 1.		 
+		ELSE
+			
+			PASSTHRU('INSERT  INTO PAYMENT_FAILURE(  ERRORCODE,			'||
+					 								'REFERENCENUMBER ,	'||
+													'TIMESTAMP ,		'||
+													'SYSTEM ,			'||
+													'MSISDN , 			'||
+													'CHANNEL ,			'||
+													'AMOUNT , 			'||
+													'TYPE , 			'||
+													'COUNTER) VALUES(?,?,?,?,?,?,?,?,?)',
+					  InputRoot.XML.Alert.ErrorCode,
+					  TRIM(InputRoot.XML.Alert.ReferenceNumber),
+					  substring(cast(CURRENT_TIMESTAMP as CHARACTER) from 12 for 23),
+					  '001',
+					  Environment.Variables.Save.EEAudit[1].MSISDN,
+					  Environment.Variables.Save.EEAudit[1].CHANNEL,
+			      	  Environment.Variables.Save.EEAudit[1].AMOUNT,
+					  '',
+					  '1');
+					  set ErrorCount=1;
+		END IF;
+		
+		--set the error count for the specific error to env to be used to check frequency
+		set Environment.Variables.Save.ErrorCount=ErrorCount;
+		
+		
+		/********** Anoop Joseph Babu/26.02.06/moving to filter node isActive?
+		
+		-- Get error details from PAYMENT_ERROR_CODE_DESC
+		SET Environment.Variables.Save.Payment_Error_Desc[]	=	PASSTHRU(	'SELECT  ERRORDESC "Desc", '		||
+												 									'NOTIFY "Notify", '			||
+												 									'ALERTSUBJECT "Subject",'	||
+												 									'SEVERITY "Severity", '		||
+												 									'SMS_FREQUENCY "SMS_Frequency", '		||
+												 									'EMAIL_FREQUENCY "EMAIL_Frequency" '		||
+												 							'FROM PAYMENT_ERROR_CODE_DESC where ERRORCODE =?', TRIM(InputRoot.XML.Alert.ErrorCode));
+			
+		-- Decide notfication method based on frequency 
+		set Environment.Variables.Save.ErrorCount=ErrorCount;
+		declare Flag Char;
+		Call Check_Frequency(ErrorCount,Environment.Variables.Save.Payment_Error_Desc[1].SMS_Frequency,Flag);
+		set Environment.Variables.Save.SMS_FLG = Flag;
+		Call Check_Frequency(ErrorCount,Environment.Variables.Save.Payment_Error_Desc[1].EMAIL_Frequency,Flag);
+		set Environment.Variables.Save.EMAIL_FLG = Flag;
+		
+		********* Anoop Joseph Babu/26.02.06/moving to filter node isActive? */
+		RETURN TRUE;
+		
+		
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+	
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+	
+END MODULE;
+
+
+
+
+CREATE FILTER MODULE AlertSystemRequest_SNTP
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		RETURN Environment.Variables.Save.Payment_Error_Desc[1].Notify='1';
+	END;
+
+END MODULE;
+
+
+
+
+CREATE COMPUTE MODULE AlertSystemRequest_FormatSNTPMsgCompute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		--CALL CopyMessageHeaders();
+		CALL CopyEntireMessage();
+		set OutputRoot.MQMD.Format='MQSTR';
+		Set OutputRoot.XML.Alert.ErrorCode			=InputRoot.XML.Alert.ErrorCode;
+		Set OutputRoot.XML.Alert.ReferenceNumber	=InputRoot.XML.Alert.ReferenceNumber;
+		Set OutputRoot.XML.Alert.Description		=Environment.Variables.Save.Payment_Error_Desc[1].Desc;
+		Set OutputRoot.XML.Alert.Subject			=Environment.Variables.Save.Payment_Error_Desc[1].Subject;
+		Set OutputRoot.XML.Alert.Severity			=Environment.Variables.Save.Payment_Error_Desc[1].Severity;
+			
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE COMPUTE MODULE AlertSystemRequest_GetSubscribersCompute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		-- Declare Count Integer;
+		Declare I Integer 1;
+		
+		--gets the subscriber userid,sms notify and email notify flags of all subscribers to this error from PAYMENT_ERROR_SUBSCRIBERS
+		set Environment.Variables.Save.Subscribers[]=
+		PASSTHRU(	'SELECT USERID "UserID" ,		'||
+					'SMS_NOTIFY "SMS_Notify",		'||
+					'EMAIL_NOTIFY "EMAIL_Notify"	'||
+					'FROM PAYMENT_ERROR_SUBSCRIBERS	'||
+					'WHERE ERRORCODE =? and (SMS_NOTIFY=''1'' or EMAIL_NOTIFY=''1'')',trim(InputRoot.XML.Alert.ErrorCode)); 
+				
+		set Environment.Variables.Save.Count= cardinality(Environment.Variables.Save.Subscribers[]);
+		
+		-- for each subscriber do
+		While I <= Environment.Variables.Save.Count do
+    		CALL CopyMessageHeaders();
+			SET OutputRoot.MQMD.Format = 'MQSTR';
+			
+			--get each subscriber detail info from PAYMENT_ERROR_USERS
+			set Environment.Variables.Save.Subscribers_Details[]=
+			PASSTHRU(	'SELECT NAME "Name" ,		'||
+						'MSISDN "MSISDN",			'||
+						'EMAIL "EMAIL",				'||
+						'ACTIVE "Active"			'||
+						'FROM PAYMENT_ERROR_USERS	'||
+						'WHERE USERID=? ',trim(Environment.Variables.Save.Subscribers[I].UserID)); 
+			set OutputRoot.XML.Alert.ErrorCode		=InputRoot.XML.Alert.ErrorCode;
+			Set OutputRoot.XML.Alert.Description	=Environment.Variables.Save.Payment_Error_Desc[1].Desc;
+			set OutputRoot.XML.Alert.ReferenceNumber=InputRoot.XML.Alert.ReferenceNumber;
+			set OutputRoot.XML.Alert.UserID			=Environment.Variables.Save.Subscribers[I].UserID;
+			set OutputRoot.XML.Alert.Name			=Environment.Variables.Save.Subscribers_Details[1].Name;
+			set OutputRoot.XML.Alert.User.MSISDN	=Environment.Variables.Save.Subscribers_Details[1].MSISDN;
+			set OutputRoot.XML.Alert.EMAIL			=Environment.Variables.Save.Subscribers_Details[1].EMAIL;
+			set OutputRoot.XML.Alert.SMS_Notify		=Environment.Variables.Save.Subscribers[I].SMS_Notify;
+			set OutputRoot.XML.Alert.EMAIL_Notify	=Environment.Variables.Save.Subscribers[I].EMAIL_Notify;
+			set OutputRoot.XML.Alert.Active			=Environment.Variables.Save.Subscribers_Details[1].Active;
+			set OutputRoot.XML.Alert.MSISDN			=Environment.Variables.Save.EEAudit[1].MSISDN;
+			set OutputRoot.XML.Alert.Channel		=Environment.Variables.Save.EEAudit[1].CHANNEL;
+			set OutputRoot.XML.Alert.Amount			=Environment.Variables.Save.EEAudit[1].AMOUNT;
+			set OutputRoot.XML.Alert.PayType		=Environment.Variables.Save.EEAudit[1].PayType;
+			
+			
+			propagate;
+			
+			Set I = I+1;			
+
+		End while;
+		RETURN false;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE FILTER MODULE AlertSystemRequest_SMS_Filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		RETURN (Root.XML.Alert.SMS_Notify='1' and Root.XML.Alert.Active='1' and Environment.Variables.Save.SMS_FLG='Y');
+	END;
+
+END MODULE;
+
+
+CREATE FILTER MODULE AlertSystemRequest_Email_Filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		RETURN (Root.XML.Alert.EMAIL_Notify='1' and Root.XML.Alert.Active='1' and Environment.Variables.Save.EMAIL_FLG='Y');
+	END;
+
+END MODULE;
+
+
+
+
+CREATE COMPUTE MODULE AlertSystemRequest_PrepareEmailMsgCompute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		DECLARE NEWLINE     CHARACTER CAST(X'0D0A' AS CHARACTER CCSID 1208);
+		DECLARE TextMessage CHARACTER '';
+		
+		CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		SET TextMessage = 'Automated EAI Payment Failure Notification' 	|| NEWLINE|| NEWLINE;
+		SET TextMessage = TextMessage || 'Error Code:		 '|| COALESCE(InputRoot.XML.Alert.ErrorCode,'-')			|| NEWLINE;
+		SET TextMessage = TextMessage || 'Error Description: '|| COALESCE(InputRoot.XML.Alert.Description,'-')		|| NEWLINE;
+		SET TextMessage = TextMessage || 'Reference Number:	 '|| COALESCE(InputRoot.XML.Alert.ReferenceNumber,'-')	|| NEWLINE;
+		SET TextMessage = TextMessage || 'Time Stamp:		 '||substring(cast(CURRENT_TIMESTAMP as CHARACTER) from 12 for 23)|| NEWLINE;
+		SET TextMessage = TextMessage || 'MSISDN:		 '|| COALESCE(InputRoot.XML.Alert.MSISDN,'-')			|| NEWLINE;
+		SET TextMessage = TextMessage || 'Channel:		 '|| COALESCE(InputRoot.XML.Alert.Channel,'-')			|| NEWLINE;
+		SET TextMessage = TextMessage || 'Amount:		 '|| COALESCE(InputRoot.XML.Alert.Amount,'-')			|| NEWLINE;
+		SET TextMessage = TextMessage || 'Pay Type:		 '|| COALESCE(InputRoot.XML.Alert.PayType,'-')			|| NEWLINE;
+		SET TextMessage = TextMessage || 'Error Count:	 '|| cast(COALESCE(Environment.Variables.Save.ErrorCount,'-')as character)|| NEWLINE;
+		SET OutputRoot.XML.EE_EAI_MESSAGE.From			='eai@sbm.net.sa';
+		SET OutputRoot.XML.EE_EAI_MESSAGE.To			= InputRoot.XML.Alert.EMAIL;
+		SET OutputRoot.XML.EE_EAI_MESSAGE.Subject		= InputRoot.XML.Alert.Description||': Ref#: '||TRIM(InputRoot.XML.Alert.ReferenceNumber)||' :MSISDN: '|| COALESCE(InputRoot.XML.Alert.MSISDN,'-');
+		SET OutputRoot.XML.EE_EAI_MESSAGE.Body			= TextMessage;
+		
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE FILTER MODULE FailureProcessingFlow_filterExpression
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		RETURN TRUE;
+	END;
+
+END MODULE;
+
+
+
+CREATE COMPUTE MODULE AlertSystemRequest_PrepareSMSMsgCompute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		set OutputRoot.MQMD.Format='MQSTR';
+		declare message character '';
+		declare Space_150 character '                                                                                                                                                      ';
+		--SET OutputRoot.XML.Alert.ErrorCode       = InputRoot.XML.Alert.ErrorCode;
+		--SET OutputRoot.XML.Alert.ReferenceNumber = InputRoot.XML.Alert.ReferenceNumber;
+		--SET OutputRoot.XML.Alert.MSISDN          = InputRoot.XML.Alert.User.MSISDN;
+		--SET OutputRoot.XML.Alert.Message         = 'Error: ' || InputRoot.XML.Alert.ErrorCode || ' has occured for Ref#: ' || InputRoot.XML.Alert.ReferenceNumber || '.';
+		set message = InputRoot.XML.Alert.User.MSISDN||';Error: ' || InputRoot.XML.Alert.ErrorCode  ||' ('|| InputRoot.XML.Alert.Description ||')'|| ' has occurred for Ref#: ' || trim(InputRoot.XML.Alert.ReferenceNumber) ||' Channel: '||COALESCE(InputRoot.XML.Alert.Channel,'-')|| '.;';
+		set message =overlay (Space_150 placing  message from 1 for length (message)	);
+		SET OutputRoot.MRM.SMSMsg=message;
+		set OutputRoot.Properties.MessageSet='NT2U92G002001';
+		set OutputRoot.Properties.MessageType='SMSRequest';
+		set OutputRoot.Properties.MessageFormat='CWF1';
+		set OutputRoot.Properties.Domain='MRM';
+		
+ 
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+CREATE FILTER MODULE IsActive_Filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		DECLARE ActivationTime TIMESTAMP;
+		-- Get error details (error desc,notify,alertsubject,severity,sms_frequency,email_frequency,activation_time,accum_count,error_type
+		--from PAYMENT_ERROR_CODE_DESC
+		SET Environment.Variables.Save.Payment_Error_Desc[]	=	PASSTHRU(	'SELECT  ERRORDESC "Desc", '		||
+												 									'NOTIFY "Notify", '			||
+												 									'ALERTSUBJECT "Subject",'	||
+												 									'SEVERITY "Severity", '		||
+												 									'SMS_FREQUENCY "SMS_Frequency", '			||
+												 									'EMAIL_FREQUENCY "EMAIL_Frequency", '		||
+												 									'ACCUM_COUNT "ErrorCount", '			 	||
+												 									'ERROR_TYPE "ErrorType", '		    		||
+												 									'ACTIVATION_TIME "ActiveTime" '				||
+												 							'FROM PAYMENT_ERROR_CODE_DESC where ERRORCODE =?', TRIM(Root.XML.Alert.ErrorCode));
+		
+		--get the activation time from the environment
+		--Environment.Variables.Save.Payment_Error_Desc[1].ActiveTime; --COALESCE(Environment.Variables.Save.Payment_Error_Desc[1].ActiveTime, NULL);										 							
+		
+		--if the value is null then assume that the error is active
+		IF(Environment.Variables.Save.Payment_Error_Desc[1].ActiveTime IS NULL) THEN
+			RETURN TRUE;
+		END IF;
+		
+		--if the value is <= current timestamp then return true else return false
+		IF( Environment.Variables.Save.Payment_Error_Desc[1].ActiveTime <= CURRENT_TIMESTAMP ) THEN
+			RETURN TRUE;
+		--else return false	
+		ELSE
+			RETURN FALSE;
+		END IF;
+		
+		/****
+		-- Decide notfication method based on frequency 
+		declare Flag Char;
+		Call Check_Frequency(ErrorCount,Environment.Variables.Save.Payment_Error_Desc[1].SMS_Frequency,Flag);
+		set Environment.Variables.Save.SMS_FLG = Flag;
+		Call Check_Frequency(ErrorCount,Environment.Variables.Save.Payment_Error_Desc[1].EMAIL_Frequency,Flag);
+		set Environment.Variables.Save.EMAIL_FLG = Flag;
+		***/
+		RETURN TRUE;
+	END;
+
+END MODULE;
+
+
+CREATE FILTER MODULE IsGlobal_Filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		
+		DECLARE ErrorType CHAR;
+		--set the error type by default to global in case no value in the DB (this case should not happen as it is a not null field in table)
+		SET ErrorType = COALESCE(Environment.Variables.Save.Payment_Error_Desc[1].ErrorType,'G');
+		
+		--if ErrorType = 'G' return true else if 'S' return false
+		IF (ErrorType = 'G') THEN
+			RETURN TRUE;
+		-- else if 'S' return false
+		ELSEIF (ErrorType = 'S') THEN
+			RETURN FALSE;
+		END IF;
+		
+	END;
+
+END MODULE;
+
+
+CREATE COMPUTE MODULE CalcErrorCountGlobal_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		--copy input to output
+		CALL CopyEntireMessage();
+		
+		--get the count from environment var
+		DECLARE ErrCount FLOAT;
+		SET ErrCount = COALESCE(Environment.Variables.Save.Payment_Error_Desc[1].ErrorCount,0);
+		-- increment the error count
+		SET ErrCount = ErrCount + 1;
+		--update the DB with the new count
+		DECLARE DbQuery CHAR 'UPDATE PAYMENT_ERROR_CODE_DESC SET ACCUM_COUNT =? WHERE ERRORCODE=?';
+		PASSTHRU(DbQuery,CAST(ErrCount AS INTEGER),TRIM(InputRoot.XML.Alert.ErrorCode));
+		
+		
+		DECLARE SMSFreq,EmailFreq CHAR;
+		--output of check
+		DECLARE Flag CHAR;
+		--set the freq values from environment
+		SET SMSFreq=COALESCE(Environment.Variables.Save.Payment_Error_Desc[1].SMS_Frequency,'');
+		SET EmailFreq=COALESCE(Environment.Variables.Save.Payment_Error_Desc[1].EMAIL_Frequency,'');
+		--check and set if the error count is in frequency range for SMS
+		CALL Check_Frequency(CAST(ErrCount AS INTEGER),SMSFreq,Flag);
+		SET Environment.Variables.Save.SMS_FLG = Flag;
+		
+		--check and set if error count is in frequency range for Email
+		CALL Check_Frequency(CAST(ErrCount AS INTEGER),EmailFreq,Flag);
+		SET Environment.Variables.Save.EMAIL_FLG=Flag; 
+		
+		
+		
+				
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+
+CREATE COMPUTE MODULE CalcErrorCountSpecific_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyEntireMessage();
+		--for specific errors the error count is already present (calculated from PAYMENT_FAILURE in Log Payment Error compute node)
+		declare Flag Char;
+		--check if the error count is in frequency count for SMS. Assign the flag status accordingly
+		Call Check_Frequency(Environment.Variables.Save.ErrorCount,Environment.Variables.Save.Payment_Error_Desc[1].SMS_Frequency,Flag);
+		set Environment.Variables.Save.SMS_FLG = Flag;
+		--check if the error count is in frequency count for Email. Assign the flag status accordingly
+		Call Check_Frequency(Environment.Variables.Save.ErrorCount,Environment.Variables.Save.Payment_Error_Desc[1].EMAIL_Frequency,Flag);
+		set Environment.Variables.Save.EMAIL_FLG = Flag;
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+CREATE FILTER MODULE IsErrInFreqRange_Filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		--if either the SMS flag or the Email flag is set go ahead (return true) else return false
+		IF(Environment.Variables.Save.SMS_FLG = 'Y' OR Environment.Variables.Save.EMAIL_FLG='Y') THEN 
+		
+			--check if the error is a timeout error (if the error is indeed a timeout error, we must update the coresponding row in the 
+			--SYSTEM_SEND_TRACK table, to set the AlertSent status to Y to indicate that an alert is being sent for that error. This 
+			--would be used by the reply flows in identifying if a clearing alert should be sent or not on receipt of the reply.
+			IF(IsTimeoutError(TRIM(Root.XML.Alert.ErrorCode)))THEN
+			
+			-- then update the SYSTEM_SEND_TRACK table to set the alertsent status to Y
+				PASSTHRU('UPDATE System_Send_Track 	'||
+						 'SET AlertSent=''Y''		'||
+						 'WHERE ReferenceNumber=?',
+						 TRIM(Root.XML.Alert.ReferenceNumber));
+			END IF;
+			RETURN TRUE;
+		ELSE 	
+			RETURN FALSE;
+		END IF;
+		
+	END;
+
+END MODULE;
+
+
+CREATE FILTER MODULE IsSpecificErrorInFreq_Filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		--if either of sms or email flags are set go ahead else return false
+		RETURN (Environment.Variables.Save.SMS_FLG = 'Y' OR Environment.Variables.Save.EMAIL_FLG='Y');
+	END;
+
+END MODULE;
+
+
+CREATE COMPUTE MODULE IfGlobalIncrCount_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		 CALL CopyEntireMessage();
+		 
+		 DECLARE ErrorType CHAR;
+		--set the error type by default to global in case no value in the DB (this case should not happen as it is a not null field in table)
+		SET ErrorType = COALESCE(Environment.Variables.Save.Payment_Error_Desc[1].ErrorType,'G');
+		
+		--if ErrorType = 'G', increment the accumulated counter so that no issues come in the reply flows which decrements the counters
+		IF (ErrorType = 'G') THEN
+			--get the count from environment var
+			DECLARE ErrCount FLOAT;
+			SET ErrCount = COALESCE(Environment.Variables.Save.Payment_Error_Desc[1].ErrorCount,0);
+			-- increment the error count
+			SET ErrCount = ErrCount + 1;
+			DECLARE DbQuery CHAR 'UPDATE PAYMENT_ERROR_CODE_DESC SET ACCUM_COUNT =? WHERE ERRORCODE=?';
+			PASSTHRU(DbQuery,CAST(ErrCount AS INTEGER),TRIM(InputRoot.XML.Alert.ErrorCode));
+		END IF;
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+-- Added by Amr 15/05/2001 To prevent putting messages to queue "EE.FLOW.EXCEPTIONS "
+CREATE FILTER MODULE ReturnFalse
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		RETURN FALSE;
+	END;
+END MODULE;

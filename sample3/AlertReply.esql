@@ -1,0 +1,85 @@
+
+
+CREATE COMPUTE MODULE SMSAlertReply_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		 CALL CopyMessageHeaders();
+		 		
+		SET Environment.Variables.AlertConfig[]  = 	(SELECT T.*  FROM Database.ALERTCONFIG AS T  WHERE T.ALERTNUM =InputRoot.MRM.AlertNumber);
+		SET Environment.Variables.AlertContact[] = 	(SELECT T.*  FROM Database.ALERTCONTACT AS T  WHERE T.ALERTNUM=InputRoot.MRM.AlertNumber);
+		
+		IF (CARDINALITY(Environment.Variables.AlertConfig[]) > 0) THEN
+							
+				IF   (CAST(InputRoot.MRM.MsgCNumber AS INTEGER) >  CAST (Environment.Variables.AlertConfig.MSGCOUNT AS INTEGER)) THEN 
+					
+					IF (TRIM(Environment.Variables.AlertConfig.STATUS) <> 'E') THEN		
+						UPDATE Database.ALERTCONFIG AS T  SET STATUS = 'E',UPDATETIME = CURRENT_TIMESTAMP      WHERE T.ALERTNUM      = Environment.Variables.AlertConfig.ALERTNUM ;
+					
+						DECLARE I INTEGER 0;			
+						DECLARE AlertContactPointer REFERENCE TO Environment.Variables.AlertContact;
+						WHILE (LASTMOVE(AlertContactPointer)) DO
+							
+							SET I = I + 1;
+							CALL CopyMessageHeaders(); 	
+						
+							IF ( TRIM(Environment.Variables.AlertContact[I].MSDN) <> '' AND TRIM(Environment.Variables.AlertConfig.MESSAGE) <> '' ) THEN
+						
+								SET OutputLocalEnvironment.Destination.MQ.DestinationData.queueName        = 'SMS.MESSAGE.REQUEST.BE';
+								DECLARE SMSMessage CHAR ( TRIM(Environment.Variables.AlertContact[I].MSDN) || ',EAI,'  || TRIM(Environment.Variables.AlertConfig.MESSAGESEVRITY) || '    ' || TRIM(Environment.Variables.AlertConfig.MESSAGE ) ) ;
+								SET OutputRoot.Properties.MessageSet 									      = 'ITEB53O002001';
+								SET OutputRoot.Properties.MessageFormat 								      = 'CWF1';
+								SET OutputRoot.Properties.MessageType 									      = 'Response';
+								SET OutputRoot.MRM.SMSMessage 											      = SUBSTRING(SMSMessage FROM 1 FOR 160);
+						
+								PROPAGATE;
+						
+							END IF;
+		
+							IF (TRIM(Environment.Variables.AlertContact[I].EMAILADDRESS) <> '' AND TRIM(Environment.Variables.AlertConfig.EMAILTEXT) <> '' ) THEN
+						
+								SET OutputRoot											 			          =  InputRoot ;
+								SET OutputRoot.MRM														      =  NULL ;
+								SET OutputLocalEnvironment.Destination.MQ.DestinationData.queueName           = 'EMAIL.REQUEST';
+								SET OutputRoot.Properties.MessageDomain 								      = 'XML';
+								SET OutputRoot.Properties.MessageFormat 								      = 'XML';
+								SET OutputRoot.Properties.MessageType 									      = '';
+								SET OutputRoot.XML.EE_EAI_MESSAGE.From 									 	  = 'eai@sbm.net.sa';
+								SET OutputRoot.XML.EE_EAI_MESSAGE.To 									      =  TRIM(Environment.Variables.AlertContact[I].EMAILADDRESS) ;
+								SET OutputRoot.XML.EE_EAI_MESSAGE.Subject 								      =  TRIM(Environment.Variables.AlertConfig.EMAILSUBJECT);
+								SET OutputRoot.XML.EE_EAI_MESSAGE.Body 									      =  TRIM(Environment.Variables.AlertConfig.EMAILTEXT) ;
+					
+								PROPAGATE;
+						
+							END IF;
+							
+						MOVE AlertContactPointer NEXTSIBLING;
+						END WHILE;
+						
+						RETURN FALSE;
+						
+					END IF;
+					
+					RETURN FALSE;
+					
+										
+				ELSE 
+					UPDATE Database.ALERTCONFIG AS T  SET STATUS = 'R',UPDATETIME = CURRENT_TIMESTAMP      WHERE T.ALERTNUM      = Environment.Variables.AlertConfig.ALERTNUM ;
+					RETURN FALSE;
+				END IF;
+		END IF;
+		RETURN FALSE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;

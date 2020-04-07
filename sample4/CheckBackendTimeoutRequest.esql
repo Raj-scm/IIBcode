@@ -1,0 +1,92 @@
+
+
+CREATE COMPUTE MODULE CheckBackendTimeoutRequest_GetTimedoutPaymentsCompute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		-- creation of query for record retrival
+		declare timeout_payments char;
+		
+		--Anoop Joseph Babu/27-02-2006/2426/changed query to include counted field also (the field has been newly added on the table)
+		--select the timedout requests for all system having alertsent=N, counted=N and timeout+entrytime < current time	 
+		set Environment.Variables.Save.Timedout_Payments[]=
+			PASSTHRU(	'SELECT ReferenceNumber "ReferenceNumber" ,					'||
+						'EntryTime "EntryTime",										'||
+						'System "System"											'||
+						'FROM System_Send_Track, SYSTEM_TIMEOUT_CONFIGURATION		'||
+						'WHERE AlertSent=''N'' 										'||
+						'AND Counted=''N''											'||
+						'AND SystemID = System 									'||
+						'AND EntryTime+ TO_DSINTERVAL(TIMEOUTPERIOD) <to_date(?, ''yyyy-mm-dd hh24:mi:ss'')',substring(cast(CURRENT_TIMESTAMP as CHARACTER) from 12 for 19));
+	
+		
+		-- for each retreived record create an XML message and propogate
+		Declare I integer 1;
+		set Environment.Variables.Save.Count=cardinality(Environment.Variables.Save.Timedout_Payments[]);
+		While I <= Environment.Variables.Save.Count do
+    		CALL CopyMessageHeaders();
+			SET OutputRoot.MQMD.Format = 'MQSTR';
+							
+			If Environment.Variables.Save.Timedout_Payments[I].System ='PORTAL' then
+				set OutputRoot.XML.Alert.ErrorCode='9806';
+			Else
+				If Environment.Variables.Save.Timedout_Payments[I].System ='EMA' then
+					set OutputRoot.XML.Alert.ErrorCode='9807';
+				Else
+					If Environment.Variables.Save.Timedout_Payments[I].System ='SADAD' then
+						set OutputRoot.XML.Alert.ErrorCode='9808';
+					Else
+						If Environment.Variables.Save.Timedout_Payments[I].System ='FRNT' then
+							set OutputRoot.XML.Alert.ErrorCode='9812'; -- Front End Channel Timeout Period
+						End if;
+					End If;
+				End if;
+			End If;
+			
+			set OutputRoot.XML.Alert.ReferenceNumber=Environment.Variables.Save.Timedout_Payments[I].ReferenceNumber;
+			
+			--Anoop Joseph Babu/27-02-2006/2426
+			--set the counted flag to Y for each selected record to indicate that the same has been counted and should not be picked up again
+			PASSTHRU('UPDATE System_Send_Track 	'||
+					 'SET Counted=''Y''		'||
+					 'WHERE ReferenceNumber=?',
+					 TRIM(Environment.Variables.Save.Timedout_Payments[I].ReferenceNumber));
+					 
+					 
+			/**** Anoop Joseph Babu/27-02-2006/2426/moved to AlertSystemRequest flow as decision as to whether alert is sent is made there.
+			
+			-- Update AlertSent flag for the records in the System_Send_Track table
+			PASSTHRU('UPDATE System_Send_Track 	'||
+					 'SET AlertSent=''Y''		'||
+					 'WHERE ReferenceNumber=?',
+					 TRIM(Environment.Variables.Save.Timedout_Payments[I].ReferenceNumber));
+			*/
+			
+			propagate;
+			--End if;
+			Set I = I+1;			
+
+		End while;
+		
+		RETURN False;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+CREATE FILTER MODULE FailureProcessingFlow_filterExpressionC
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		RETURN FALSE;
+	END;
+
+END MODULE;

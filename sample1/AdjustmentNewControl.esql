@@ -1,0 +1,361 @@
+DECLARE anc_replayThresholdCnt EXTERNAL INTEGER 3 ;          
+
+CREATE FILTER MODULE Adjustment_Payment_Filter_Adjustment
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		DECLARE adjEnvVariable REFERENCE TO Environment.Variables ;
+		IF adjEnvVariable.adjustmentType = 2 THEN
+			RETURN TRUE;
+		ELSEIF adjEnvVariable.adjustmentType = 1 THEN
+		
+			RETURN FALSE;
+			
+		ELSE
+			
+			RETURN UNKNOWN;
+		END IF;
+	END;
+
+END MODULE;
+
+
+
+
+CREATE COMPUTE MODULE AdjustmentPaymentControlService_Adjustment_Payment_Msg
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+	
+		 CALL CopyMessageHeaders();
+		
+		CREATE FIELD Environment.Variables ;
+		DECLARE enVariables REFERENCE TO Environment.Variables ;
+		DECLARE adj_PayRetryStatQuery, adj_inmsg CHARACTER '' ;
+		DECLARE bl_inpayload BLOB ;
+		
+		DECLARE rfMobily REFERENCE TO InputRoot.XMLNSC.MOBILY_BSL_SR ;
+		SET enVariables.inputMsg = InputRoot.XMLNSC ;
+		
+		SET bl_inpayload 	= ASBITSTREAM(InputRoot.XMLNSC ENCODING 273 CCSID 1208);
+		SET adj_inmsg 	= CAST(bl_inpayload AS CHARACTER CCSID 1208 ENCODING 273);
+		SET enVariables.adj_inmsg = adj_inmsg ;
+		
+		
+		SET enVariables.srId 		= rfMobily.ServiceRequestId ;
+		SET enVariables.ChannelTransID 		= rfMobily.ChannelTransId ;
+		SET enVariables.ParsedMsg.SRID = enVariables.srId  ;
+		SET enVariables.LineNumber	= rfMobily.LineNumber ;
+		SET enVariables.retry 		= COALESCE(rfMobily.IsRetry, 'N') ;
+		SET enVariables.retryCnt 	= COALESCE(rfMobily.RetryCount, '0') ; -- element name has to verify on input message
+		
+		IF UCASE(enVariables.retry) = 'Y' AND threshold_RetryCnt > CAST(enVariables.retryCnt AS INTEGER) THEN
+			SET enVariables.updatePyt= PASSTHRU('UPDATE SR_PAYMENT_RETRY_TBL  SET STATUS = 2 WHERE SR_ID = ? AND STATUS=1' VALUES(enVariables.srId));
+			
+		END IF ;
+		
+			SET OutputRoot.XMLNSC = InputRoot.XMLNSC ;
+		RETURN TRUE;
+		
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+END MODULE;
+
+
+
+
+CREATE COMPUTE MODULE AdjustmentPaymentControlService_error_Audit_Msg
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		
+		 CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		DECLARE enVariables REFERENCE TO Environment.Variables ;
+		DECLARE paymentRequest REFERENCE TO enVariables.inputMsg.MOBILY_BSL_SR ;
+		DECLARE trackingPoint REFERENCE TO enVariables ; -- pending
+		UPDATE Database.SR_PAYMENT_TBL AS patble SET LAST_UPDATE_TIME = CURRENT_DATE, STATUS = 'STATUS_FAILED_SENT_TO_ONLINE_CHARGING (5072)', 
+								ERROR_CODE = enVariables.errorCode WHERE patble.SR_ID = paymentRequest.ServiceRequestId AND patble.STATUS <> '6' ;
+		---Audit Entry--
+		SET enVariables.AuditEntry.SR_ID 			= paymentRequest.ServiceRequestId ;
+		SET enVariables.AuditEntry.CHANNEL_TRANS_ID = paymentRequest.ChannelTransId ;
+		SET enVariables.AuditEntry.LINE_NUMBER 		= paymentRequest.LineNumber ;
+		SET enVariables.AuditEntry.MESSAGE_ID 		= enVariables.msgId ;
+		SET enVariables.AuditEntry.TRACKING_POINT 	= 3831 ;
+		SET enVariables.AuditEntry.TRACKING_POINT_STATUS = 1 ;
+		SET enVariables.AuditEntry.MESSAGE 			= SUBSTRING(CAST(ASBITSTREAM(enVariables.inputMsg ENCODING 273 CCSID 1208) AS CHARACTER CCSID 1208 ENCODING 273) from 1 for 2499);  
+		
+		CALL callAudit(enVariables.AuditEntry) ;
+		DECLARE replayCnt INTEGER ;
+		SET replayCnt = CAST(COALESCE(InputRoot.MQRFH2.usr.(MQRFH2.Field)replayQCnt, '0') AS INTEGER) + 1 ;
+		IF replayCnt < anc_replayThresholdCnt THEN
+			CALL CopyEntireMessage();
+--			PASSTHRU('DELETE FROM SR_PAYMENT_CHLTRANSID_UQ_TBL WHERE CHANNEL_TRANS_ID = ?', Environment.Variables.ParsedMsg.MOBILY_BSL_SR.ChannelTransId);
+			SET OutputExceptionList = NULL ;
+			SET OutputLocalEnvironment = NULL ;
+			SET OutputRoot.MQMD.Format = 'MQHRF2' ;
+			SET OutputRoot.MQRFH2 = NULL ;
+			CREATE NEXTSIBLING OF OutputRoot.MQMD DOMAIN 'MQRFH2' ;
+			CREATE LASTCHILD OF OutputRoot.MQRFH2 NAME 'usr' ;
+			DECLARE refMQRFH2 REFERENCE TO OutputRoot.MQRFH2 ;
+			SET refMQRFH2.usr.(MQRFH2.Field)replayQCnt 	= replayCnt ;
+			DECLARE returnValue BOOLEAN;
+			SET returnValue = SLEEP(1000);
+			RETURN TRUE ;
+		END IF ;
+		---						
+--		SET enVariables.newQ3 =
+--		PASSTHRU('INSERT INTO Database.SR_PAYMENT_AUDIT_TBL (ID, SR_ID, CHANNEL_TRANS_ID, LINE_NUMBER,TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,
+--				BE_REFERENCE_NUMBER, NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID) VALUES (SR_PAYMENT_AUDIT_SEQ.NEXTVAL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+--				VALUES (COALESCE(paymentRequest.ServiceRequestId, ''),paymentRequest.ChannelTransId,paymentRequest.LineNumber, 
+--				6761,2, COALESCE(trackingPoint.BackEndRefNumber, '') ,COALESCE(trackingPoint.NewBalance, ''), 
+--				enVariables.ch_outMsg, COALESCE(trackingPoint.BackEndRefId, ''), COALESCE(trackingPoint.BackEndRefNumberType, ''), COALESCE(paymentRequest.ReportMsgId, ''))) ;
+--				
+		
+		RETURN FALSE ;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+	  
+	
+	CREATE PROCEDURE callAudit(IN env REFERENCE) BEGIN
+		SET env.ActualData = OutputRoot ;
+		SET OutputRoot.XMLNSC = NULL ;
+		CALL createAuditMessage_ANC(env) ;
+		SET OutputRoot.XMLNSC = env.OutputRoot.XMLNSC ;
+		PROPAGATE TO LABEL 'AUDIT' DELETE NONE ;
+		SET OutputRoot = env.ActualData ;
+		SET env.OutputRoot = NULL ;
+		SET env.ActualData = NULL ;
+	END;
+	
+END MODULE;
+
+
+
+
+CREATE COMPUTE MODULE AdjustmentPaymentControlService_Process_Error_Msg
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		 CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		DECLARE inCCSID INT InputProperties.CodedCharSetId;
+		DECLARE inEncoding INT InputProperties.Encoding;
+		DECLARE inBitStream BLOB ASBITSTREAM(InputRoot.BLOB, inEncoding, inCCSID); 
+		DECLARE enVariables REFERENCE TO Environment.Variables ;
+		
+		DECLARE replayCnt INTEGER ;
+		SET replayCnt = CAST(COALESCE(InputRoot.MQRFH2.usr.(MQRFH2.Field)replayQCnt, '0') AS INTEGER) + 1 ;
+		
+	/*	
+	--	IF replayCnt < anc_replayThresholdCnt THEN
+			CALL CopyEntireMessage();
+--			PASSTHRU('DELETE FROM SR_PAYMENT_CHLTRANSID_UQ_TBL WHERE CHANNEL_TRANS_ID = ?', Environment.Variables.ParsedMsg.MOBILY_BSL_SR.ChannelTransId);
+			SET OutputExceptionList = NULL ;
+			SET OutputLocalEnvironment = NULL ;
+			SET OutputRoot.MQMD.Format = 'MQHRF2' ;
+			SET OutputRoot.MQRFH2 = NULL ;
+			CREATE NEXTSIBLING OF OutputRoot.MQMD DOMAIN 'MQRFH2' ;
+			CREATE LASTCHILD OF OutputRoot.MQRFH2 NAME 'usr' ;
+			DECLARE refMQRFH2 REFERENCE TO OutputRoot.MQRFH2 ;
+			SET refMQRFH2.usr.(MQRFH2.Field)replayQCnt 	= replayCnt ;
+			DECLARE returnValue BOOLEAN;
+			SET returnValue = SLEEP(1000);
+			PROPAGATE TO TERMINAL 'out1' ;
+		ELSE
+		*/
+			SET OutputRoot.XMLNSC.FAULT_MESSAGE.ERROR_INFO=Environment.Variables.ErrorInfo;
+			
+			SET OutputRoot.XMLNSC.FAULT_MESSAGE.SOURCE_QUEUE 	= InputRoot.MQMD.SourceQueue ;
+			SET OutputRoot.XMLNSC.FAULT_MESSAGE.SR_ID 			= enVariables.srId ;
+			SET OutputRoot.XMLNSC.FAULT_MESSAGE.ChannelTransId 	= enVariables.ChannelTransID ;
+			SET OutputRoot.XMLNSC.FAULT_MESSAGE.LineNumber = enVariables.LineNumber ;
+			
+			CREATE LASTCHILD OF OutputRoot.XMLNSC.FAULT_MESSAGE.ORIGINAL_MESSAGE PARSE(inBitStream, inEncoding, inCCSID,'BLOB');
+			RETURN TRUE;
+		--END IF ;
+	--	RETURN FALSE ;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+
+CREATE COMPUTE MODULE AdjustmentPaymentControlService_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		
+		CALL CopyEntireMessage();
+		DECLARE enVariables REFERENCE TO Environment.Variables ;
+		IF enVariables.adjustmentType = 2  AND  enVariables.NewControlInfo.SkipBE <> 'Portal' THEN
+			
+			--SET enVariables.payDealQuery = 'SELECT P.DEAL_NAME FROM SR_PAYMENT_REASONS_PKG_MAP_TBL AS P WHERE  P.REASON_CODE =' ||COALESCE(CAST(enVariables.reasonCode AS CHARACTER), '');
+		 								
+				SET enVariables.paymentReasonDeal[] = SELECT pr.DEAL_NAME	FROM Database.SR_PAYMENT_REASONS_PKG_MAP_TBL AS pr WHERE pr.REASON_CODE = enVariables.reasonCode ;
+			IF NOT EXISTS(enVariables.paymentReasonDeal.*[] ) THEN
+				--SET enVariables.paymentDeal_Query  = 'SELECT P.DEAL_NAME FROM SR_PAYMENT_REASONS_TBL AS P WHERE P.CODE =' ||''''||COALESCE(enVariables.reasonCode, '')||'''';
+				SET enVariables.paymentDeals[]= SELECT pr.DEAL_NAME	FROM Database.SR_PAYMENT_REASONS_TBL AS pr WHERE pr.CODE = enVariables.reasonCode ;
+				--SET enVariables.paymentDeals[] = PASSTHRU(enVariables.paymentDeal_Query);
+			END IF;
+			
+			SET enVariables.FoundDeals = COALESCE(enVariables.paymentReasonDeal.DEAL_NAME,enVariables.paymentDeals.DEAL_NAME);
+			
+			IF EXISTS(enVariables.FoundDeals[]) THEN
+				SET enVariables.dealName = COALESCE(enVariables.paymentReasonDeal.DEAL_NAME,enVariables.FoundDeals,enVariables.FoundDeals.DEAL_NAME);
+				SET enVariables.updtePayment = PASSTHRU('UPDATE SR_PAYMENT_TBL  SET DEAL_NAME = ? WHERE SR_ID = ?'  VALUES( enVariables.dealName, enVariables.srId));
+				DECLARE purchasedReq CHARACTER;
+				SET purchasedReq= 'ServiceRequestId='||enVariables.srId||';Retry=N;RetryCount=0;';
+				SET OutputRoot.XMLNSC=null;
+				SET OutputRoot.BLOB.BLOB=CAST(purchasedReq AS BLOB CCSID InputRoot.Properties.CodedCharSetId);
+	 
+				--SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueManagerName = Environment.Variables.ParsedMsg.MOBILY_BSL_SR.FINAL_REPLY_QUEUE_MANAGER;
+				SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueName = 'MOBILY.FUNC.PAYMENTS.NEWCTRL.PORTAL.INT.REQ.NEW';
+ 				-- DELETE PAYMENT request temp record
+				DELETE FROM Database.SR_PAYMENT_REQUEST_TEMP_TBL AS dlt WHERE dlt.SR_ID = enVariables.srId ;
+			ELSE 
+				SET OutputRoot.XMLNSC.MOBILY_BSL_SR=null; 
+				DECLARE outRef REFERENCE TO OutputRoot; 
+				CALL generateSubServiceRequest(enVariables.inputMsg,Environment.Variables,outRef);
+				--SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueManagerName = Environment.Variables.ParsedMsg.MOBILY_BSL_SR.FINAL_REPLY_QUEUE_MANAGER;
+				IF(InputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.FuncId='ADJUSTMENT_PAYMENT')THEN
+					IF (enVariables.IsNewControl IS NOT NULL AND UCASE(enVariables.IsNewControl) = 'Y' ) THEN
+			    		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.RequestorChannelId = 'BSL';
+					END IF;
+				 	SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueName = 'MOBILY.FUNC.PAYMENTS.ADJ.PORTALSERVICE.REQ.NEW';
+			    END IF;
+			    IF(InputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.FuncId='PAYMENT_REVERSE')THEN
+				 	--SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueName = 'MOBILY.FUNC.PAYMENTS.PORTALSERVICE.REQUEST.NEW';
+					IF (enVariables.IsNewControl IS NOT NULL AND UCASE(enVariables.IsNewControl) = 'Y' ) THEN
+			    		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.RequestorChannelId = 'BSL';
+					END IF;
+						SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueName = 'MOBILY.FUNC.PAYMENTS.PORTALSERVICE.REQUEST.NEW';	
+
+			    END IF;
+				
+				-- DELETE PAYMENT request temp record
+				DELETE FROM Database.SR_PAYMENT_REQUEST_TEMP_TBL AS dlt WHERE dlt.SR_ID = enVariables.srId ;
+			END IF;
+		ELSEIF enVariables.adjustmentType = 1  AND  enVariables.NewControlInfo.SkipBE <> 'Portal' THEN
+			SET OutputRoot.XMLNSC.MOBILY_BSL_SR=null;
+			DECLARE outRef REFERENCE TO OutputRoot;
+			CALL generateSubServiceRequest(enVariables.inputMsg,Environment.Variables,outRef);
+		--	SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueManagerName = Environment.Variables.ParsedMsg.MOBILY_BSL_SR.FINAL_REPLY_QUEUE_MANAGER;
+			--SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueName = 'MOBILY.FUNC.PAYMENTS.PORTALSERVICE.REQUEST.NEW'; 
+			
+			IF(InputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.FuncId='ADJUSTMENT_PAYMENT')THEN
+					IF (enVariables.IsNewControl IS NOT NULL AND UCASE(enVariables.IsNewControl) = 'Y' ) THEN
+			    		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.RequestorChannelId = 'BSL';
+					END IF;
+				 	SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueName = 'MOBILY.FUNC.PAYMENTS.ADJ.PORTALSERVICE.REQ.NEW';
+			    END IF;
+			IF(InputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.FuncId='PAYMENT_REVERSE')THEN
+					IF (enVariables.IsNewControl IS NOT NULL AND UCASE(enVariables.IsNewControl) = 'Y' ) THEN
+			    		SET OutputRoot.XMLNSC.MOBILY_BSL_SR.SR_HEADER.RequestorChannelId = 'BSL';
+					END IF;
+						SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueName = 'MOBILY.FUNC.PAYMENTS.PORTALSERVICE.REQUEST.NEW';	
+						
+			 END IF;
+			
+			PROPAGATE TO TERMINAL 'out' DELETE NONE; -- send to internal Portal system;
+			-- DELETE PAYMENT request temp record
+			DELETE FROM Database.SR_PAYMENT_REQUEST_TEMP_TBL AS dlt WHERE dlt.SR_ID = enVariables.srId ;
+			RETURN FALSE;
+		END IF;
+			
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+--CREATE FUNCTION GenerateSRId() RETURNS CHAR 
+--     BEGIN 
+--     	DECLARE TMP ROW;
+--     	  SET TMP.SRVICEREQUEST_SEQ = PASSTHRU('SELECT SR_SERVICEREQUEST_SEQ.NEXTVAL FROM DUAL');
+--     	  
+--     	  RETURN 'SR_'||CAST(CAST(TMP.SRVICEREQUEST_SEQ.NEXTVAL AS DECIMAL)AS CHAR);
+--     	  
+--     END;
+
+
+
+
+    
+CREATE PROCEDURE createAuditMessage_ANC(IN env REFERENCE) BEGIN
+
+--              SET enVariables.OUTPUTROOT = OutputRoot ;
+--
+--              SET OutputRoot.XMLNSC = NULL ;
+
+              CREATE LASTCHILD OF env.OutputRoot.XMLNSC NAME 'InsertPaymentAudit' ;
+              DECLARE outAud REFERENCE TO env.OutputRoot.XMLNSC.InsertPaymentAudit ;
+
+              SET outAud.SR_ID                  = env.SR_ID ;
+              SET outAud.CHANNEL_TRANS_ID       = env.CHANNEL_TRANS_ID ;
+              SET outAud.LINE_NUMBER            = env.LINE_NUMBER ;
+              SET outAud.TRACKING_POINT         = env.TRACKING_POINT ;
+              SET outAud.TRACKING_POINT_STATUS	= env.TRACKING_POINT_STATUS ;
+              SET outAud.BE_REFERENCE_NUMBER    = env.BE_REFERENCE_NUMBER ;
+              SET outAud.NEW_BALANCE            = env.Variables.NEW_BALANCE ;              
+              SET outAud.MESSAGE                =CAST(COALESCE(env.AuditMsg,  env.MESSAGE) AS CHAR CCSID 1208) ;
+              SET outAud.BE_REFERENCE_ID        = env.BE_REFERENCE_ID ;
+              SET outAud.BE_REFERENCE_TYPE      = env.BE_REFERENCE_TYPE ;
+              SET outAud.MESSAGE_ID             = env.MESSAGE_ID ;
+
+             
+
+--              PROPAGATE TO LABEL 'AUDIT' DELETE NONE ;
+--
+--              SET OutputRoot.XMLNSC = NULL ;
+--
+--              SET OutputRoot = enVariables.OUTPUTROOT ;
+--
+--              SET enVariables.OUTPUTROOT = NULL ;
+
+       END;
+     
+     

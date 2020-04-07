@@ -1,0 +1,171 @@
+ 
+
+CREATE COMPUTE MODULE SFRT_SuccessUpdate
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		DECLARE cmr_replayThresholdCnt   INTEGER 3 ;
+		CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		DECLARE enVariables REFERENCE TO Environment.Variables ;
+		DECLARE bl_payLoad BLOB ;
+		SET bl_payLoad 				= ASBITSTREAM(InputRoot.XMLNSC ENCODING 273 CCSID 1208);
+		SET enVariables.ch_repinMsg 	= CAST(bl_payLoad AS CHARACTER CCSID 1208 ENCODING 273);
+		---Audit Entry--
+		SET enVariables.AuditEntry.SR_ID 			= enVariables.SRID ;
+		SET enVariables.AuditEntry.CHANNEL_TRANS_ID = enVariables.ChannelTransId ;
+		SET enVariables.AuditEntry.LINE_NUMBER 		= enVariables.LineNumber ;
+		SET enVariables.AuditEntry.MESSAGE_ID 		= enVariables.msgId ;
+		SET enVariables.AuditEntry.TRACKING_POINT 	= 6758 ;
+		SET enVariables.AuditEntry.TRACKING_POINT_STATUS = 1 ;
+		SET enVariables.AuditEntry.MESSAGE 			= enVariables.ch_repinMsg ;
+
+		CALL callAudit(enVariables.AuditEntry) ;
+--		SET enVariables.auditEntry 	=						
+--								PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL (ID, SR_ID, CHANNEL_TRANS_ID, LINE_NUMBER,TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,
+--									BE_REFERENCE_NUMBER, NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID) VALUES (SR_PAYMENT_AUDIT_SEQ.NEXTVAL,?,?,?,?,?,?,?,?,?,?,?,?)'
+--									VALUES (enVariables.SRID,enVariables.ChannelTransId,enVariables.LineNumber, CURRENT_TIMESTAMP,6758,1, NULL ,NULL, 
+--									enVariables.ch_repinMsg, NULL, NULL, enVariables.msgId)) ;
+	--	SET enVariables.updatePyt	= PASSTHRU('UPDATE SR_PAYMENT_TBL  SET ERROR_CODE = 0, STATUS = 26738, LAST_UPDATE_TIME = ? WHERE SR_ID = ? AND STATUS!=6' VALUES(CURRENT_TIMESTAMP, enVariables.SRID));
+		
+		
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+	
+	CREATE PROCEDURE callAudit(IN env REFERENCE) BEGIN
+		SET env.ActualData = OutputRoot ;
+		SET OutputRoot.XMLNSC = NULL ;
+		CALL createAuditMessage_SFRT(env) ;
+		SET OutputRoot.XMLNSC = env.OutputRoot.XMLNSC ;
+		PROPAGATE TO LABEL 'AUDIT' DELETE NONE ;
+		SET OutputRoot = env.ActualData ;
+		SET env.OutputRoot = NULL ;
+		SET env.ActualData = NULL ;
+	END;
+	
+     
+	
+	
+END MODULE;
+
+
+
+
+
+CREATE COMPUTE MODULE SFRT_FailureUpdate
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		DECLARE cmr_replayThresholdCnt   INTEGER 3 ;
+		CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		DECLARE enVariables REFERENCE TO Environment.Variables ;
+		DECLARE bl_payLoad BLOB ;
+		SET bl_payLoad 				= ASBITSTREAM(InputRoot.XMLNSC ENCODING 273 CCSID 1208);
+		SET enVariables.ch_repinMsg 	= CAST(bl_payLoad AS CHARACTER CCSID 1208 ENCODING 273);
+		DECLARE replayCnt INTEGER ;
+		SET replayCnt = CAST(COALESCE(InputRoot.MQRFH2.usr.(MQRFH2.Field)replayQCnt, '0') AS INTEGER) + 1 ;
+		
+		IF replayCnt < cmr_replayThresholdCnt THEN
+			THROW USER EXCEPTION ;
+		
+		ELSE
+				---Audit Entry--
+			SET enVariables.AuditEntry.SR_ID 			= enVariables.SRID ;
+			SET enVariables.AuditEntry.CHANNEL_TRANS_ID = enVariables.ChannelTransId ;
+			SET enVariables.AuditEntry.LINE_NUMBER 		= enVariables.LineNumber ;
+			SET enVariables.AuditEntry.MESSAGE_ID 		= enVariables.msgId ;
+			SET enVariables.AuditEntry.TRACKING_POINT 	= 6758 ;
+			SET enVariables.AuditEntry.TRACKING_POINT_STATUS = 2 ;
+			SET enVariables.AuditEntry.MESSAGE 			= enVariables.ch_repinMsg ;
+	
+			CALL callAudit(enVariables.AuditEntry) ;
+			
+--			SET enVariables.auditEntry 	=						
+--									PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL (ID, SR_ID, CHANNEL_TRANS_ID, LINE_NUMBER,TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,
+--										BE_REFERENCE_NUMBER, NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID) VALUES (SR_PAYMENT_AUDIT_SEQ.NEXTVAL,?,?,?,?,?,?,?,?,?,?,?,?)'
+--										VALUES (enVariables.SRID,enVariables.ChannelTransId,enVariables.LineNumber, CURRENT_TIMESTAMP,6758,2, NULL ,NULL, 
+--										enVariables.ch_repinMsg, NULL, NULL, enVariables.msgId)) ;
+	--	SET enVariables.updatePyt	= PASSTHRU('UPDATE SR_PAYMENT_TBL  SET ERROR_CODE = 0, STATUS = 26738, LAST_UPDATE_TIME = ? WHERE SR_ID = ? AND STATUS!=6' VALUES(CURRENT_TIMESTAMP, enVariables.SRID));
+		
+		END IF ;
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+	CREATE PROCEDURE callAudit(IN env REFERENCE) BEGIN
+		SET env.ActualData = OutputRoot ;
+		SET OutputRoot.XMLNSC = NULL ;
+		CALL createAuditMessage_SFRT(env) ;
+		SET OutputRoot.XMLNSC = env.OutputRoot.XMLNSC ;
+		PROPAGATE TO LABEL 'AUDIT' DELETE NONE ;
+		SET OutputRoot = env.ActualData ;
+		SET env.OutputRoot = NULL ;
+		SET env.ActualData = NULL ;
+	END;
+	
+	 
+	
+	
+END MODULE;
+
+
+
+	
+     
+CREATE PROCEDURE createAuditMessage_SFRT(IN env REFERENCE) BEGIN
+
+--              SET enVariables.OUTPUTROOT = OutputRoot ;
+--
+--              SET OutputRoot.XMLNSC = NULL ;
+
+              CREATE LASTCHILD OF env.OutputRoot.XMLNSC NAME 'InsertPaymentAudit' ;
+              DECLARE outAud REFERENCE TO env.OutputRoot.XMLNSC.InsertPaymentAudit ;
+
+              SET outAud.SR_ID                  = env.SR_ID ;
+              SET outAud.CHANNEL_TRANS_ID       = env.CHANNEL_TRANS_ID ;
+              SET outAud.LINE_NUMBER            = env.LINE_NUMBER ;
+              SET outAud.TRACKING_POINT         = env.TRACKING_POINT ;
+              SET outAud.TRACKING_POINT_STATUS	= env.TRACKING_POINT_STATUS ;
+              SET outAud.BE_REFERENCE_NUMBER    = env.BE_REFERENCE_NUMBER ;
+              SET outAud.NEW_BALANCE            = env.Variables.NEW_BALANCE ;              
+              SET outAud.MESSAGE                =CAST(COALESCE(env.AuditMsg,  env.MESSAGE) AS CHAR CCSID 1208) ;
+              SET outAud.BE_REFERENCE_ID        = env.BE_REFERENCE_ID ;
+              SET outAud.BE_REFERENCE_TYPE      = env.BE_REFERENCE_TYPE ;
+              SET outAud.MESSAGE_ID             = env.MESSAGE_ID ;
+
+             
+
+--              PROPAGATE TO LABEL 'AUDIT' DELETE NONE ;
+--
+--              SET OutputRoot.XMLNSC = NULL ;
+--
+--              SET OutputRoot = enVariables.OUTPUTROOT ;
+--
+--              SET enVariables.OUTPUTROOT = NULL ;
+
+       END;

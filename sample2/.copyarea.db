@@ -1,0 +1,9 @@
+ClearCase CopyAreaDB|4
+vobs\eaimb_mfw_salesorder\AdjustmentsWrapperMFPrj
+2
+5
+19:AdjustmentsCallerCMP.esql|1|16e558bc66c|2f23|f0def3d0|89b4c76a5fc611e780830002cbb9474c|0
+1c:AdjustmentsCallerCMP.msgflow|1|16e558bc6d7|29ed|ed736a8b|8524c72a5fc611e780830002cbb9474c|0
+17:AdjustmentsWrapper.esql|1|16e558bc6cd|23e0|cd4f31a7|88a4c75a5fc611e780830002cbb9474c|0
+8:.project|1|16e558bc674|a5b|537959c0|8774c74a5fc611e780830002cbb9474c|0
+1a:AdjustmentsWrapper.msgflow|1|16e558bc6e9|2ac5|1b16b13e|8644c73a5fc611e780830002cbb9474c|0

@@ -1,0 +1,116 @@
+CREATE COMPUTE MODULE MQ_SyncRequest_PrepareMqMsg
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+
+		DECLARE blobMsg BLOB ASBITSTREAM(InputRoot.XMLNSC CCSID 1208);
+		SET OutputLocalEnvironment=InputLocalEnvironment;
+		CALL CopyEntireMessage();
+		
+		-- Setting the Out Timestamp
+		SET Environment.Variables.RequestVars.OutTimestamp = CAST(CURRENT_TIMESTAMP AS CHARACTER FORMAT 'yyyy-MM-dd HH:mm:ss.SSSSSS');
+		SET OutputRoot.MQRFH2 = NULL ;
+	--	SET OutputRoot.MQMD = NULL ;
+	--	CREATE NEXTSIBLING OF OutputRoot.Properties DOMAIN 'MQMD';
+		
+--		SET OutputRoot.MQMD.MsgId =  CAST (Environment.Variables.RequestVars.MsgId AS BLOB);
+		SET OutputRoot.MQMD.CorrelId = InputRoot.MQMD.MsgId ;
+		SET OutputRoot.MQMD.ReplyToQ =  'MOBILY.CUSTOMERINFO.INQ.REPLY' ; -- Vishnu
+	--	SET OutputRoot.MQMD.Format      = 'XMLNSC';
+		--SET OutputRoot.MQMD.CorrelId    = InputRoot.MQMD.MsgId;
+		--SET OutputRoot.MQMD.ReplyToQ	= 'MOBILY.FUNC.CFR.CUSTOMER.INFO.REPLY';
+		SET OutputRoot.MQMD.ReplyToQMgr	= '';
+		SET OutputRoot.MQMD.CodedCharSetId	= 1208;
+		SET OutputRoot.MQMD.Report	= 0;
+		
+		--the below line might need to to uncomment in case of aggregation
+--	--	Set OutputRoot.MQMD.CorrelId = CAST(Environment.Variables.ContextVars.MsgId AS BLOB);
+--		SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueName = Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.URI;
+--		SET OutputLocalEnvironment.Destination.MQ.DestinationData[1].queueManagerName  = Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.EndpointQueueManager;
+----		SET OutputRoot.MQMD.ReplyToQ =  Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.ReplyToQ ;
+----		SET OutputRoot.MQMD.ReplyToQMgr =  COALESCE(Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.ReplyToQMgr, QueueManagerName);
+----		SET OutputLocalEnvironment.MQ.GET.QueueName = OutputRoot.MQMD.ReplyToQ;
+----		SET OutputLocalEnvironment.MQ.GET.MQGMO.Options = MQGMO_ACCEPT_TRUNCATED_MSG;
+----		SET OutputLocalEnvironment.MQ.GET.MQGMO.WaitInterval = CAST(Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.TimeoutInterval AS INTEGER);
+--			
+----		SET OutputRoot.MQMD.CodedCharSetId = CAST(Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.CodedCharSetId AS INT);
+----		SET OutputRoot.MQMD.Encoding =CAST( Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.Encoding AS INT);
+----		SET OutputRoot.MQMD.MsgType=MQMT_REQUEST;
+--		IF (Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.DestinationType = 'DTGM') THEN
+--			SET OutputRoot.MQMD.MsgType=MQMT_DATAGRAM;
+--		END IF;
+--		-- set the username token give priority to the database bae value and then the cincoming request value
+--		DECLARE BE_Username, BE_Password CHAR;
+--		--CALL getBackendCredentials(Environment.Variables.RequestVars.EndpointId, Environment.Variables.RequestVars.RequestorChannelId, BE_Username, BE_Password);
+--		
+--		IF COALESCE(BE_Username, NULLIF(Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.EndpointUsername,'') , Environment.Variables.RequestVars.UsernameToken.Username) IS NOT NULL
+--			OR COALESCE(BE_Password, NULLIF(Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.EndpointPassword,'') , Environment.Variables.RequestVars.UsernameToken.Password) IS NOT NULL THEN
+--			
+--			SET OutputRoot.XMLNSC.*:*.*:RequestHeader.Security.UsernameToken.Username =COALESCE(BE_Username, NULLIF(Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.EndpointUsername,'') , Environment.Variables.RequestVars.UsernameToken.Username);
+--			SET OutputRoot.XMLNSC.*:*.*:RequestHeader.Security.UsernameToken.Password =COALESCE(BE_Password, NULLIF(Environment.Variables.FlowEndpoints.{Environment.Variables.RequestVars.EndpointId}.EndpointPassword,'') , Environment.Variables.RequestVars.UsernameToken.Password);
+--		END IF;
+	 
+ 		 
+--		SET OutputRoot.MQMD.Priority = Default_Priority;
+		 
+
+	    
+	   RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+
+
+CREATE COMPUTE MODULE MQ_SyncRequest_CheckFailure_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+ 
+		--need to prepare something?  
+		IF EXISTS(InputExceptionList.[])THEN
+			SET Environment.Variables.RequestVars.ExceptionHandling='Y'; 
+			SET Environment.Variables.RequestVars.EventExceptionHandling = 'Y';
+			DECLARE TempExceptionList ROW InputExceptionList;
+			Create LASTCHILD of OutputRoot DOMAIN('XML') Name 'XML'; 
+			SET OutputRoot.XML.ExceptionList = InputExceptionList; 
+			DECLARE EXCEPTIONBLOB BLOB ASBITSTREAM(OutputRoot.XML.ExceptionList); 
+			DECLARE XmlString CHAR CAST(EXCEPTIONBLOB AS CHAR CCSID 1208); 
+			SET  Environment.Variables.EventMessage.ExceptionList =XmlString;
+			SET OutputRoot.XML=NULL;
+			DECLARE ErrorCode,ErrorDesc CHAR; 
+			DECLARE InputException REFERENCE TO InputExceptionList; 
+			
+			SET Environment.Variables.getCustomerInfo.ErrorCode = ErrorCode;
+			SET Environment.Variables.getCustomerInfo.ErrorDesc = ErrorDesc;		 
+		ELSE
+			IF(InputRoot.XMLNSC.EE_EAI_MESSAGE.EE_EAI_HEADER.ReturnCode='0000') THEN
+				SET Environment.Variables.getCustomerInfo.PlanCategory=InputRoot.XMLNSC.EE_EAI_MESSAGE.PlanCategory;
+				SET Environment.Variables.getCustomerInfo.PackageId=InputRoot.XMLNSC.EE_EAI_MESSAGE.PackageId;
+				SET Environment.Variables.getCustomerInfo.CustomerType=InputRoot.XMLNSC.EE_EAI_MESSAGE.CustomerType; 
+				SET Environment.Variables.getCustomerInfo.IsNewControl=InputRoot.XMLNSC.EE_EAI_MESSAGE.IsNewControl; 
+				--JK19-25253
+				SET Environment.Variables.getCustomerInfo.AccountNumber=InputRoot.XMLNSC.EE_EAI_MESSAGE.AccountNumber;
+								
+				SET Environment.Variables.getCustomerInfoRsMsg=SUBSTRING(CAST(ASBITSTREAM(InputRoot.XMLNSC) AS CHARACTER CCSID 1208)FROM 1 FOR 2499);
+			ELSE
+				SET Environment.Variables.getCustomerInfo.ErrorCode = InputRoot.XMLNSC.EE_EAI_MESSAGE.EE_EAI_HEADER.ReturnCode;
+			END IF;  
+		END IF;
+		
+		RETURN TRUE;
+	END;
+END MODULE;
+

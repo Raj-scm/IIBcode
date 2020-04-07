@@ -1,0 +1,83 @@
+
+
+CREATE COMPUTE MODULE AuditInsertDB_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		 CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		SET Environment.Variables.retryCnt = COALESCE(Environment.Variables.retryCnt, 0) + 1 ;
+             
+       	DECLARE inMsg REFERENCE TO InputRoot.XMLNSC.InsertPaymentAudit ;
+     
+       
+       	SET Environment.Variables.dbquery =
+                                PASSTHRU('INSERT INTO SR_PAYMENT_AUDIT_TBL (ID, SR_ID, CHANNEL_TRANS_ID, LINE_NUMBER,TIMESTAMP, TRACKING_POINT, TRACKING_POINT_STATUS,
+                                        BE_REFERENCE_NUMBER, NEW_BALANCE, MESSAGE, BE_REFERENCE_ID, BE_REFERENCE_TYPE,MESSAGE_ID) VALUES (SR_PAYMENT_AUDIT_SEQ.NEXTVAL,?,?,?,?,?,?,?,?,?,?,?,?)'
+                                        VALUES (inMsg.SR_ID,
+                                        inMsg.CHANNEL_TRANS_ID,
+                                        inMsg.LINE_NUMBER,
+                                        CURRENT_TIMESTAMP,
+                                        CAST(inMsg.TRACKING_POINT AS INTEGER),
+                                        CAST(inMsg.TRACKING_POINT_STATUS AS INTEGER),
+                                        NULL ,NULL,
+                                        inMsg.MESSAGE,
+                                        NULL, NULL,
+                                        inMsg.MESSAGE_ID)) ;
+     
+      	RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+
+CREATE COMPUTE MODULE insErrorMessage_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		 CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+
+		DECLARE inCCSID INT InputProperties.CodedCharSetId;
+		DECLARE inEncoding INT InputProperties.Encoding;
+		DECLARE inBitStream BLOB ASBITSTREAM(InputRoot.BLOB, inEncoding, inCCSID); 
+		
+		DECLARE ErrorInfo ROW;
+		--DECLARE ExceptionListRef REFERENCE TO InputExceptionList;
+		CALL PARSEExceptionList(InputExceptionList,ErrorInfo);
+		
+		DECLARE CompleteErrorMsg CHAR;		  	 
+		SET CompleteErrorMsg=CAST(CURRENT_TIMESTAMP AS CHAR)||';   Flow Name  :'||ErrorInfo.FLOW_NAME||';  Node Name  :'||ErrorInfo.NODE_NAME||';  Errror Text  :'|| ErrorInfo.ERROR_DETAILS;
+		
+		
+		SET OutputRoot.XMLNSC.FAULT_MESSAGE.ERROR_INFO=CompleteErrorMsg;
+		SET OutputRoot.XMLNSC.FAULT_MESSAGE.ORIGINAL_MESSAGE = InputRoot.XMLNSC ;
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;

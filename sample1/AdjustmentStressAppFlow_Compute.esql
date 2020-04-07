@@ -1,0 +1,66 @@
+DECLARE eCountAdj EXTERNAL INTEGER '' ;
+DECLARE iCTransID  SHARED INTEGER ;
+DECLARE UniqueID EXTERNAL INTEGER '';
+DECLARE LineNumber EXTERNAL CHARACTER '';
+DECLARE Amount EXTERNAL INTEGER '';
+DECLARE AdjustmentType EXTERNAL CHARACTER '';
+DECLARE AdjustmentCode EXTERNAL INTEGER '';
+
+CREATE COMPUTE MODULE AdjustmentStressAppFlow_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyEntireMessage();
+		
+				
+		DECLARE iCOunt INTEGER '0';
+		DECLARE cTransID CHARACTER ;
+		
+		IF iCTransID IS NULL  THEN
+			SET iCTransID = UniqueID;--'2000000000' ;
+		END IF ;
+		
+		DECLARE LN CHARACTER ;
+		DECLARE Amt CHARACTER ;
+		DECLARE AdjType CHARACTER ;
+		DECLARE AdjCode CHARACTER ;
+		
+		SET  LN = LineNumber;		
+		SET  Amt = Amount;
+		SET  AdjType = AdjustmentType;
+		SET  AdjCode = AdjustmentCode;
+		
+	SET iCOunt = 1;
+	X : WHILE iCOunt <= eCountAdj DO
+			SET	cTransID = CAST (iCTransID AS CHARACTER );
+			
+		--	DECLARE Outref CONSTANT BLOB CAST('<MOBILY_BSL_SR><SR_HEADER><FuncId>ADJUSTMENT_PAYMENT</FuncId><MsgVersion>0000</MsgVersion><RequestorChannelId>BMS</RequestorChannelId><SrDate>20190429103908</SrDate><RequestorUserId>qauser</RequestorUserId><RequestorLanguage>E</RequestorLanguage><OverwriteOpenOrder>N</OverwriteOpenOrder><Chargeable>N</Chargeable><ChargeAmount>0.0</ChargeAmount></SR_HEADER><ChannelTransId>'|| cTransID ||'</ChannelTransId><LineNumber>966546750324</LineNumber><Amount>1</Amount><Currency/><AdjustmentType>Credit</AdjustmentType><AdjustmentCode>255</AdjustmentCode><ISREVENUE>N</ISREVENUE><Comments>test</Comments><CustomerType/></MOBILY_BSL_SR>' AS BLOB CCSID 1208);
+			DECLARE Outref CONSTANT BLOB CAST('<MOBILY_BSL_SR><SR_HEADER><FuncId>ADJUSTMENT_PAYMENT</FuncId><MsgVersion>0000</MsgVersion><RequestorChannelId>BMS</RequestorChannelId><SrDate>20190429103908</SrDate><RequestorUserId>qauser</RequestorUserId><RequestorLanguage>E</RequestorLanguage><OverwriteOpenOrder>N</OverwriteOpenOrder><Chargeable>N</Chargeable><ChargeAmount>0.0</ChargeAmount></SR_HEADER><ChannelTransId>'|| cTransID ||'</ChannelTransId><LineNumber>'|| LN ||'</LineNumber><Amount>'|| Amt ||'</Amount><Currency/><AdjustmentType>'|| AdjType ||'</AdjustmentType><AdjustmentCode>'|| AdjCode ||'</AdjustmentCode><ISREVENUE>N</ISREVENUE><Comments>test</Comments><CustomerType/></MOBILY_BSL_SR>' AS BLOB CCSID 1208);
+			CALL CopyMessageHeaders();
+			SET OutputRoot.MQMD.ReplyToQ = 'STRESS.TEST.RESPONSE';
+			SET OutputRoot.BLOB.BLOB = Outref;
+			SET Environment.variable.TRANSID = cTransID ; 
+			
+			PROPAGATE TO TERMINAL 'out' DELETE NONE;
+  			SET iCTransID = CAST (cTransID AS INTEGER) + 1;
+  			SET iCOunt = iCOunt + 1;
+  		END WHILE X;
+		
+		RETURN FALSE ;
+
+
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;

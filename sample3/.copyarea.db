@@ -1,0 +1,9 @@
+ClearCase CopyAreaDB|4
+vobs\eaimb_mfw_salesorder\AlertFlowP
+2
+5
+14:AlertRequest.msgflow|1|16e558bc7a3|a95|cce69cc0|c02fb8e85fce11e780c90002cbb9474c|0
+11:AlertRequest.esql|1|16e558bc743|16b4|27c2fe70|c0ffb8f85fce11e780c90002cbb9474c|0
+f:AlertReply.esql|1|16e558bc6ed|eba|8975d263|c29fb9185fce11e780c90002cbb9474c|0
+8:.project|1|16e558bc6e5|a92|7bc066ec|c36fb9285fce11e780c90002cbb9474c|0
+12:AlertReply.msgflow|1|16e558bc737|a7e|f9e3934c|c1cfb9085fce11e780c90002cbb9474c|0
